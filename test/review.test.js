@@ -406,34 +406,74 @@ test('B-2 (A) a hub that refuses device numbers: the standby goes again by name,
   assert.equal((await cmd(F('target-temperature'), 21.5)).success, false, 'standby guard');
 });
 
-test('B-3 a hub that answers numbers OK without doing it: not yet visible, then after 90 s sent again by number and name, names proven and kept', async () => {
+test('B-3 m-23 a hub that answers numbers OK without doing it: not yet visible, then sent again by number and name; never "proven" (both forms left together)', async () => {
   const store = memoryStore();
   const world = fakeHub({ zones: two() });
   world.numbers = 'ignore';
   const devices = world.zones.map((z) => created(z));
-  const { app, gladys, clock, start, cmd, wait } = await setup({ world, devices, store });
+  const { app, gladys, start, cmd, wait } = await setup({ world, devices, store });
   await start();
   const ack = await cmd(F('mode'), 'standby');
   assert.match(ack.error, /pas encore visible/);
   assert.match(gladys.fake.connectionStatus.message.en, /not yet visible/);
-  assert.equal(app.formOf(HUB), 'number', 'no switch on one read');
   await wait(MINUTE);
   assert.equal(world.count('FROST_ON'), 1, 'not decided before 90 s');
   await wait(MINUTE);
   const frost = world.sent.filter((s) => s.name === 'FROST_ON').map((s) => s.argument);
   assert.deepEqual(frost.slice(1), [[1], ['Living room']]);
   assert.equal(world.zone(1).STANDBY, true);
-  assert.equal(app.formOf(HUB), 'name', 'proven: by number contradicted, by name shown');
-  assert.deepEqual(store.data.names, [HUB]);
+  assert.equal(app.formOf(HUB), 'number', 'no proof: both forms left together');
+  assert.deepEqual(store.data.names, []);
   assert.doesNotMatch(gladys.fake.connectionStatus.message.en, /not applied|not yet visible/);
   app.stop();
-  // m-16: remembered across a restart: the next standby goes by name at once.
-  const next = await setup({ world, devices, store, now: clock.now + SECOND });
+});
+
+test('I-12 a stop answered but not yet visible is sent again after a restart within the 90 s', async () => {
+  const store = memoryStore();
+  const world = fakeHub({ zones: two() });
+  world.numbers = 'ignore';
+  const devices = world.zones.map((z) => created(z));
+  const { app, clock, start, cmd } = await setup({ world, devices, store });
+  await start();
+  await cmd(F('mode'), 'standby');
+  assert.equal(store.data.guards[0].pending, true, 'kept pending in /data while not visible');
+  app.stop();
+  const before = world.sent.length;
+  const next = await setup({ world, devices, store, now: clock.now + 30 * SECOND });
   await next.start();
-  await next.cmd(F('mode', 2), 'standby');
-  assert.deepEqual(world.sent.filter((s) => s.name === 'FROST_ON').at(-1).argument, ['Hall']);
-  assert.equal(world.zone(2).STANDBY, true);
+  assert.equal(world.sent[before].name, 'FROST_ON', 'sent again before the first read');
   next.app.stop();
+});
+
+test('m-25 L5 numbers refused and the name refused too: no proof', async () => {
+  const world = fakeHub();
+  world.numbers = 'refuse';
+  world.zones[0].ZONE_NAME = 'Living room';
+  const { app, start, cmd } = await setup({ world });
+  await start();
+  // The hub knows the zone under another name: the name is refused as well.
+  world.zones[0].ZONE_NAME = 'Lounge';
+  await cmd(F('mode'), 'standby');
+  assert.deepEqual(
+    world.sent.filter((s) => s.name === 'FROST_ON').map((s) => s.argument),
+    [[1], ['Living room']],
+  );
+  assert.equal(app.formOf(HUB), 'number');
+});
+
+test('m-25 L7 names-only hub: a setpoint on a zone whose name cannot be sent goes by number', async () => {
+  const store = memoryStore({ names: [HUB] });
+  const world = fakeHub({ zones: [ZONE({ ZONE_NAME: "Kid's room" })] });
+  const { start, cmd } = await setup({
+    world,
+    store,
+    config: ON,
+    devices: [created({ ZONE_NAME: "Kid's room" })],
+  });
+  await start();
+  const ack = await cmd(F('target-temperature'), 22);
+  assert.equal(ack.success, true, ack.error);
+  assert.deepEqual(world.sent.find((s) => s.name === 'SET_TEMP').argument, [22, [1]]);
 });
 
 test('B-3 contradiction told in the status and the badge once 90 s passed', async () => {
@@ -795,4 +835,27 @@ test('m-13 R39 the status gives the true wait: never shorter than the interval',
   const { gladys, start } = await setup({ world, config: { ...CONFIG, poll_interval: 600 } });
   await start();
   assert.match(gladys.fake.connectionStatus.message.en, /new try in 10 min/);
+});
+
+test('m-16 names proven (numbers refused, name taken) are kept across a restart', async () => {
+  const store = memoryStore();
+  const world = fakeHub({ zones: two() });
+  world.numbers = 'refuse';
+  const devices = world.zones.map((z) => created(z));
+  const { app, clock, start, cmd } = await setup({ world, devices, store });
+  await start();
+  await cmd(F('mode'), 'standby');
+  assert.deepEqual(store.data.names, [HUB]);
+  app.stop();
+  const next = await setup({ world, devices, store, now: clock.now + SECOND });
+  await next.start();
+  const before = world.count('FROST_ON');
+  await next.cmd(F('mode', 2), 'standby');
+  const sent = world.sent.filter((s) => s.name === 'FROST_ON').slice(before);
+  assert.deepEqual(
+    sent.map((s) => s.argument),
+    [['Hall']],
+    'by name at once',
+  );
+  next.app.stop();
 });

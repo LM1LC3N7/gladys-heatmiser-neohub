@@ -117,6 +117,6 @@ test('real clock: reads at 0, the interval and twice the interval; a standby at 
     assert.ok(gap >= 0.9 * INTERVAL, `never sooner than the interval: ${at}`);
     assert.ok(gap < 1.5 * INTERVAL, `on time: ${at}`);
   }
-  assert.ok(timersSet <= 40, `${timersSet} timers`);
+  assert.ok(timersSet <= 50, `${timersSet} timers`);
   assert.equal(gladys.fake.connectionStatus.connected, true);
 });

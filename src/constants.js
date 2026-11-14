@@ -143,7 +143,7 @@ export const TIMINGS = {
   /** Commands waiting their turn (a scene setting several zones), served one at a time. */
   commandQueue: 8,
   /** Reads after a command: its effect, then a check; never skipped (they wait their turn). */
-  followUps: [5 * SECOND, 20 * SECOND],
+  followUps: [5 * SECOND, 20 * SECOND, 95 * SECOND],
   /**
    * A standby or an away (the protective commands): a request of the polling
    * in flight for this long without an answer is cut for it (it does not

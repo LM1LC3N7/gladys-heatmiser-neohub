@@ -333,15 +333,20 @@ test('a command that may have left is never "not sent"; one that did not leave s
   assert.match(ack.error, /^Pas envoyé/);
 });
 
-test('a read back equal to the state before is "not applied", told in the status', async () => {
+test('a setpoint not shown: "not shown yet" until a read 90 s later, then told in the status and the badge (m-24)', async () => {
   const world = fakeHub();
-  const { gladys, start, cmd } = await setup({ world, config: ON });
+  const { gladys, start, cmd, wait } = await setup({ world, config: ON });
   await start();
   world.apply = false;
   const ack = await cmd(F('target-temperature'), 23);
   assert.equal(ack.success, false);
-  assert.match(ack.error, /montre encore 21 °C/);
+  assert.match(ack.error, /ne le montre pas encore/);
+  await wait(30 * SECOND);
+  assert.doesNotMatch(gladys.fake.connectionStatus.message.en, /not shown by the hub/);
+  await wait(70 * SECOND);
   assert.match(gladys.fake.connectionStatus.message.en, /not shown by the hub: Living room/);
+  const badge = gladys.fake.transports.filter((t) => t.device_external_id.endsWith('-1')).at(-1);
+  assert.equal(badge.degraded, true);
 });
 
 test('a scene on 5 slow zones (900 ms) sets all 5 in one command; an offline zone does not stop the others', async () => {

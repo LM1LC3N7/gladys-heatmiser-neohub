@@ -46,8 +46,14 @@ real hub.
   resent by number and by name (3 times at most, never with a refused token),
   told in the status and the badge; a change made in the app in that window
   may be overwritten. "Names only" for a hub only on proof (numbers refused
-  then a name taken, or a stop by number contradicted then shown by name),
-  kept in /data; a zone whose name cannot be sent always goes by number.
+  then a name taken; never when both forms left together), kept in /data; a
+  zone whose name cannot be sent always goes by number. Setpoints, Schedule
+  and Home are judged the same way (not shown yet before a read 90 s after,
+  follow-up at 95 s).
+- **Open (r4 m-26, kept as is)**: a Schedule (or Home) the hub answers with an
+  error still lifts the stop guard (its number is set when it leaves), so a
+  standby not yet applied is not sent again; this follows the latest choice of
+  the user.
 - **Acks** by ~3.4 s (send by 2.8 s, the turn in the queue and in the lane
   bounded); a stop not sent by its ack stays in the lane and leaves as soon as
   the hub is free.

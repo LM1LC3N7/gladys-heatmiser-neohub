@@ -402,12 +402,6 @@
     "to": "      if (result.answered) this.proveNames(hub);"
   },
   {
-    "name": "B-3 no proof by a contradicted number then a name shown",
-    "file": "src/app.js",
-    "from": "        if (guard.wasContradicted && guard.form === 'name' && guard.kind === 'standby') {",
-    "to": "        if (false) {"
-  },
-  {
     "name": "B-3 unsafe name not sent by number",
     "file": "src/app.js",
     "from": "batch.kind === 'away' ? keys : keys.filter((k) => !names || this.nameOf(k) === undefined);",
@@ -484,5 +478,29 @@
     "file": "src/app.js",
     "from": "      if (result.numbersRefused) {",
     "to": "      if (false) {"
+  },
+  {
+    "name": "L2 answered stop not resent after a restart",
+    "file": "src/app.js",
+    "from": "pending: this.stillPending(target, g) || (g.awaiting === true && !this.lifted(target, g)),",
+    "to": "pending: this.stillPending(target, g),"
+  },
+  {
+    "name": "L5 names proven though the name was not answered",
+    "file": "src/app.js",
+    "from": "if (refusedNumbers && result.answered) this.proveNames(hub);",
+    "to": "if (refusedNumbers) this.proveNames(hub);"
+  },
+  {
+    "name": "L7 setpoint unsafe name sent in names mode",
+    "file": "src/app.js",
+    "from": "return f === 'name' && isSafeName(name) ? name : job.target.zone;",
+    "to": "return f === 'name' ? name : job.target.zone;"
+  },
+  {
+    "name": "m-24 setpoint judged before the live data refreshes",
+    "file": "src/app.js",
+    "from": "at >= (this.writtenAt.get(key) ?? Infinity) + TIMINGS.liveLag + TIMINGS.commandAnswerBy;",
+    "to": "at >= (this.writtenAt.get(key) ?? Infinity);"
   }
 ]

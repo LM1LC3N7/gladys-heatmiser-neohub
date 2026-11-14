@@ -51,10 +51,12 @@ zone ; les veilles d'une scène partent ensemble en une commande. Un hub qui
 refuse les numéros reçoit tout de suite la zone par le nom que lui donne sa
 dernière lecture (une commande par zone) ; un hub qui répond aux numéros sans
 rien faire la reçoit par son nom au renvoi (environ 90 s plus tard, voir
-plus bas). Dès qu'un nom a marché là où le numéro n'a pas marché, ce hub
+plus bas). Dès que le hub a refusé un numéro puis accepté le nom, il
 reçoit des noms ensuite, même après un redémarrage ; une zone dont le nom
 contient une apostrophe, un guillemet ou une barre oblique inverse part
-toujours par son numéro. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
+toujours par son numéro. Sur un hub qui ignore les numéros, une telle zone ne
+peut pas être mise en veille par Gladys (le statut et le badge disent « pas
+appliqué ») : renommez-la dans l'app Heatmiser Neo. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
 d'ici là reste dans la file et part dès que le hub est libre. Un arrêt est fait
 dès qu'une lecture du hub le montre, et un changement fait ensuite dans l'app
 l'emporte (jamais renvoyé). Le hub rafraîchit ses données environ toutes les
@@ -62,7 +64,9 @@ l'emporte (jamais renvoyé). Le hub rafraîchit ses données environ toutes les
 lecture partie au moins 90 s après sa réponse ; si cette lecture ne le montre
 pas, ou si le hub n'a pas répondu, l'arrêt est renvoyé avec les prochaines
 lectures (par numéro, et par nom quand le nom peut partir), 3 fois au plus, et
-le statut et le badge de la zone le disent. Un changement fait dans l'app
+le statut et le badge de la zone le disent. Cette fenêtre dure jusqu'à la première
+lecture faite 90 s ou plus après la réponse, donc jusqu'à l'intervalle de
+lecture s'il est plus long (600 s au plus). Un changement fait dans l'app
 pendant cette fenêtre ne se distingue pas d'un arrêt non appliqué : il peut
 être écrasé, 3 fois au plus. Un Programme (ou Présent) plus
 récent parti lève l'arrêt : il n'est plus renvoyé, même après un redémarrage.
@@ -85,8 +89,11 @@ Ces commandes sont **désactivées par défaut** et demandent l'option
 Chacune est décidée sur une lecture fraîche du hub (une lecture partie après
 l'arrivée de la commande ; le hub, la zone à son numéro d'appareil et son nom à
 la lecture précédente vérifiés), adressée par le numéro d'appareil de la zone,
-envoyée en 2,8 s ou refusée sans envoi, puis relue quand aucune autre commande
-n'attend ; Gladys a sa réponse en 3,4 s environ. La même consigne (ou le même
+envoyée en 2,8 s ou refusée sans envoi, puis relue ; Gladys a sa réponse en 3,4 s
+environ. Comme pour les arrêts, une valeur que les données du hub ne montrent
+pas encore est « pas encore visible », et n'est dite non appliquée que par une
+lecture faite 90 s ou plus après son envoi (une lecture de suivi est faite
+95 s après). La même consigne (ou le même
 Programme) demandée à plusieurs zones à la fois part en une commande ; des
 consignes différentes partent l'une après l'autre, chacune dans ses 2,8 s, les
 autres refusées sans envoi (« trop tard »). Une consigne est refusée :

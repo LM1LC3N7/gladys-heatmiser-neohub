@@ -1797,7 +1797,11 @@ export class NeoHubApp {
       this.lastCheck.set(key, 'applied');
       return;
     }
-    if (unknown) {
+    // The live data of the hub is refreshed about every 90 s (PDF p. 13): a read
+    // that does not show the value yet proves nothing before that.
+    const decisive =
+      at >= (this.writtenAt.get(key) ?? Infinity) + TIMINGS.liveLag + TIMINGS.commandAnswerBy;
+    if (unknown || !decisive) {
       return;
     }
     pending.checks -= 1;
@@ -1916,10 +1920,6 @@ export class NeoHubApp {
           ? live.hubAway === true
           : live.zones.find((z) => targetKey(hubId, z.id) === key)?.standby === true;
       if (shown && at >= (guard.sentAt ?? -Infinity)) {
-        if (guard.wasContradicted && guard.form === 'name' && guard.kind === 'standby') {
-          // By number it was not applied, by name it is: this hub needs names.
-          this.proveNames(hubId);
-        }
         guard.shown = true;
         guard.pending = false;
         guard.awaiting = false;
