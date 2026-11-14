@@ -73,13 +73,21 @@ function effect(world, name, argument) {
     return list.every(Boolean) ? list : undefined;
   };
   switch (name) {
-    case 'GET_LIVE_DATA':
-      return {
+    case 'GET_LIVE_DATA': {
+      const fresh = () => ({
         HUB_AWAY: world.hubAway,
         HUB_HOLIDAY: world.hubHoliday,
         TIMESTAMP_SYSTEM: world.systemStamp,
         devices: structuredClone(world.zones),
-      };
+      });
+      // world.lag (ms): the live data is a cache refreshed that often (PDF p. 13: ~90 s).
+      if (!world.lag) return fresh();
+      if (!world.cache || world.clock.now - world.cacheAt >= world.lag) {
+        world.cache = fresh();
+        world.cacheAt = world.clock.now;
+      }
+      return structuredClone(world.cache);
+    }
     case 'GET_SYSTEM':
       return { CORF: world.unit, DEVICE_ID: 'neoHub', HUB_VERSION: 2153 };
     case 'SET_TEMP': {

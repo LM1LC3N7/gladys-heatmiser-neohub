@@ -406,24 +406,173 @@ test('B-2 (A) a hub that refuses device numbers: the standby goes again by name,
   assert.equal((await cmd(F('target-temperature'), 21.5)).success, false, 'standby guard');
 });
 
-test('B-2 (B) a hub that answers OK to numbers without doing it: contradicted, told, sent again by name', async () => {
+test('B-3 a hub that answers numbers OK without doing it: not yet visible, then after 90 s sent again by number and name, names proven and kept', async () => {
+  const store = memoryStore();
   const world = fakeHub({ zones: two() });
   world.numbers = 'ignore';
   const devices = world.zones.map((z) => created(z));
-  const { gladys, start, cmd, wait } = await setup({ world, devices });
+  const { app, gladys, clock, start, cmd, wait } = await setup({ world, devices, store });
   await start();
   const ack = await cmd(F('mode'), 'standby');
-  assert.match(ack.error, /lecture suivante ne le montre pas/);
-  assert.equal(world.zone(1).STANDBY, false);
+  assert.match(ack.error, /pas encore visible/);
+  assert.match(gladys.fake.connectionStatus.message.en, /not yet visible/);
+  assert.equal(app.formOf(HUB), 'number', 'no switch on one read');
+  await wait(MINUTE);
+  assert.equal(world.count('FROST_ON'), 1, 'not decided before 90 s');
+  await wait(MINUTE);
+  const frost = world.sent.filter((s) => s.name === 'FROST_ON').map((s) => s.argument);
+  assert.deepEqual(frost.slice(1), [[1], ['Living room']]);
+  assert.equal(world.zone(1).STANDBY, true);
+  assert.equal(app.formOf(HUB), 'name', 'proven: by number contradicted, by name shown');
+  assert.deepEqual(store.data.names, [HUB]);
+  assert.doesNotMatch(gladys.fake.connectionStatus.message.en, /not applied|not yet visible/);
+  app.stop();
+  // m-16: remembered across a restart: the next standby goes by name at once.
+  const next = await setup({ world, devices, store, now: clock.now + SECOND });
+  await next.start();
+  await next.cmd(F('mode', 2), 'standby');
+  assert.deepEqual(world.sent.filter((s) => s.name === 'FROST_ON').at(-1).argument, ['Hall']);
+  assert.equal(world.zone(2).STANDBY, true);
+  next.app.stop();
+});
+
+test('B-3 contradiction told in the status and the badge once 90 s passed', async () => {
+  const world = fakeHub({ zones: two() });
+  const devices = world.zones.map((z) => created(z));
+  const { app, gladys, start, cmd, wait } = await setup({ world, devices });
+  await start();
+  // Answered OK, never applied (by number nor by name).
+  world.apply = false;
+  await cmd(F('mode'), 'standby');
+  await wait(125 * SECOND);
   assert.match(gladys.fake.connectionStatus.message.en, /not applied \(sent again\): Living room/);
   const badge = gladys.fake.transports.filter((t) => t.device_external_id.endsWith('-1')).at(-1);
   assert.equal(badge.degraded, true);
-  await wait(MINUTE);
-  assert.deepEqual(world.sent.filter((s) => s.name === 'FROST_ON').at(-1).argument, [
-    'Living room',
-  ]);
-  assert.equal(world.zone(1).STANDBY, true);
+  // A name answered without effect proves nothing.
+  assert.ok(world.sent.some((x) => x.name === 'FROST_ON' && x.argument[0] === 'Living room'));
+  assert.equal(app.formOf(HUB), 'number');
+});
+
+test('B-3 live data refreshed late (PDF p. 13): a standby applied is never "not applied", no switch to names', async () => {
+  const world = fakeHub({ zones: [ZONE(), ZONE({ DEVICE_ID: 2, ZONE_NAME: "Kid's room" })] });
+  const devices = world.zones.map((z) => created(z));
+  const { app, gladys, start, cmd, wait } = await setup({ world, devices });
+  await start();
+  // From now on the live data is a cache refreshed every 3 s.
+  world.lag = 3000;
+  world.cache = {
+    HUB_AWAY: false,
+    HUB_HOLIDAY: false,
+    TIMESTAMP_SYSTEM: world.systemStamp,
+    devices: structuredClone(world.zones),
+  };
+  world.cacheAt = world.clock.now;
+  const ack = await cmd(F('mode'), 'standby');
+  assert.match(ack.error, /pas encore visible/);
   assert.doesNotMatch(gladys.fake.connectionStatus.message.en, /not applied/);
+  await wait(4 * SECOND);
+  assert.equal(app.formOf(HUB), 'number');
+  const second = await cmd(F('mode', 2), 'standby');
+  assert.ok(second.success || /pas encore visible/.test(second.error), second.error);
+  assert.deepEqual(world.sent.filter((s) => s.name === 'FROST_ON').at(-1).argument, [2]);
+  assert.equal(world.zone(2).STANDBY, true);
+  await wait(3 * MINUTE);
+  assert.equal(world.count('FROST_ON'), 2, 'shown by the later reads: never sent again');
+});
+
+test('B-3 a names-only hub: a zone whose name cannot be sent still gets its standby, by number', async () => {
+  const store = memoryStore({ names: [HUB] });
+  const world = fakeHub({ zones: [ZONE({ ZONE_NAME: "Kid's room" })] });
+  const { start, cmd } = await setup({
+    world,
+    store,
+    devices: [created({ ZONE_NAME: "Kid's room" })],
+  });
+  await start();
+  const ack = await cmd(F('mode'), 'standby');
+  assert.equal(ack.success, true, ack.error);
+  assert.deepEqual(world.sent.find((s) => s.name === 'FROST_ON').argument, [1]);
+});
+
+test('I-10 "Home" on a names-only hub: AWAY_OFF 0, no error', async () => {
+  const store = memoryStore({ names: [HUB] });
+  const world = fakeHub();
+  const { start, cmd } = await setup({
+    world,
+    store,
+    config: ON,
+    devices: [created(), createdHub()],
+  });
+  await start();
+  await cmd(HUB_AWAY, 'away');
+  const ack = await cmd(HUB_AWAY, 'home');
+  assert.ok(ack.success || /Envoyé/.test(ack.error), ack.error);
+  assert.deepEqual(world.sent.find((s) => s.name === 'AWAY_OFF').argument, 0);
+  assert.equal(world.hubAway, false);
+});
+
+test('M2 a setpoint refused by number is sent again by name at once, which proves names', async () => {
+  const world = fakeHub();
+  world.numbers = 'refuse';
+  const { app, start, cmd } = await setup({ world, config: ON });
+  await start();
+  const ack = await cmd(F('target-temperature'), 21.5);
+  assert.equal(ack.success, true, ack.error);
+  assert.deepEqual(
+    world.sent.filter((s) => s.name === 'SET_TEMP').map((s) => s.argument),
+    [
+      [21.5, [1]],
+      [21.5, ['Living room']],
+    ],
+  );
+  assert.equal(app.formOf(HUB), 'name');
+});
+
+test('M4 a setpoint whose read back hangs is acked by 3.4 s', async () => {
+  const world = fakeHub();
+  const { gladys, clock, start, act } = await setup({ world, config: ON });
+  await start();
+  let written = false;
+  world.hang = (name) => name === 'GET_LIVE_DATA' && written;
+  world.delay = (name) => {
+    if (name === 'SET_TEMP') written = true;
+    return 20;
+  };
+  const asked = clock.now;
+  const ack = await act(
+    gladys.fake.setValue(gladys.devices[0], { external_id: F('target-temperature') }, 22),
+  );
+  assert.ok(clock.now - asked <= 3450, `ack after ${clock.now - asked} ms`);
+  assert.match(ack.error, /Envoyé/);
+});
+
+test('M11 the ack of a standby never waits for the publication to Gladys', async () => {
+  const world = fakeHub();
+  const { app, gladys, clock, start, act } = await setup({ world });
+  await start();
+  app.gladys.setConnectionStatus = () => world.clock.sleep(20_000);
+  app.lastStatus = undefined;
+  const asked = clock.now;
+  await act(gladys.fake.setValue(gladys.devices[0], { external_id: F('mode') }, 'standby'));
+  assert.ok(clock.now - asked <= 3450, `ack after ${clock.now - asked} ms`);
+});
+
+test('m-19 stop() answers the commands waiting for a read back and cancels their timers', async () => {
+  const world = fakeHub();
+  const { app, gladys, start, act } = await setup({ world, config: ON });
+  await start();
+  world.hang = (name) => name === 'GET_LIVE_DATA' && world.count('SET_TEMP') > 0;
+  const pending = gladys.fake.setValue(
+    gladys.devices[0],
+    { external_id: F('target-temperature') },
+    22,
+  );
+  await act(new Promise((resolve) => world.clock.sleep(1500).then(resolve)));
+  assert.equal(app.unchecked.length, 1);
+  app.stop();
+  assert.equal(app.unchecked.length, 0);
+  assert.equal(app.checkTimers.size, 0);
+  await act(pending);
 });
 
 test('m-3 a standby shown by the read after its answer is done: a change in the app wins', async () => {
@@ -608,7 +757,8 @@ test('m-12 a /data slow once: the pin comes back, the status and a waiting stand
   assert.match(gladys.fake.connectionStatus.message.en, /not known yet/);
   slow = false;
   await act(gladys.fake.setValue(gladys.devices[0], { external_id: F('mode') }, 'standby'));
-  await wait(11 * SECOND);
+  // Only slow: read again at once in the background (M13), not after 10 s.
+  await wait(3 * SECOND);
   assert.equal(world.sent[0]?.name, 'FROST_ON', 'the waiting standby first, then the read');
   assert.equal(world.sent[0].argument[0], 1);
   assert.match(gladys.fake.connectionStatus.message.en, /Connected/);

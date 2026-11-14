@@ -149,7 +149,14 @@ export function normalizeMemory(raw, now = Date.now()) {
       }
     }
   }
+  // Hubs proven to need zone names (device numbers refused or ignored), 4 at most.
+  const names = Array.isArray(r.names)
+    ? [...new Set(r.names.filter((h) => typeof h === 'string' && /^[0-9a-f]{12}$/.test(h)))].slice(
+        -4,
+      )
+    : [];
   return {
+    names,
     lastAttemptAt: lastAttemptAt === undefined ? null : Math.min(lastAttemptAt, now),
     key,
     pause,

@@ -159,6 +159,11 @@ export const TIMINGS = {
    * lifts it sooner, right before it is written.
    */
   stopGuard: 10 * MINUTE,
+  /**
+   * The live data of the hub is refreshed about every 90 s (PDF p. 13): a stop
+   * the hub answered is judged on a read sent at least this long after.
+   */
+  liveLag: 90 * SECOND,
   /** A read or a write of /data is never awaited longer; unreadable at start, read again every 10 s. */
   dataTimeout: 2 * SECOND,
   dataRetry: 10 * SECOND,

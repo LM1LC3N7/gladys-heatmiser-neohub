@@ -47,15 +47,22 @@ lowers the heating of its zone; away puts every thermostat in standby and
 turns the time clocks and neoPlugs off. They are sent at once, before any
 other command waiting (a read of the hub stuck for 1 s is cut for them),
 addressed by the device number of the zone; the standbys of a scene leave
-together in one command. A hub that refuses device numbers, or answers them
-without doing anything, gets the zone by the name its last read gave (one
-command per zone), at once and from then on. Gladys gets its answer within about
+together in one command. A hub that refuses device numbers gets the zone at once
+by the name its last read gave (one command per zone); one that answers
+numbers without doing anything gets it by name when the stop is sent again
+(about 90 s later, see below). Once a name worked where the number did not,
+that hub is sent names from then on, also after a restart; a zone whose name
+holds a quote or a backslash still goes by its number. Gladys gets its answer within about
 3.4 s; a stop that could not leave by then stays in line and leaves as soon as
-the hub is free. A stop is decided by the first read of the hub sent after its
-answer: if it shows it, it is done, and a change you make later in the app
-wins (never sent again); if it does not, or the hub did not answer, the stop
-is sent again with the next reads, 3 times at most, and the status and the
-badge of the zone say so. A newer Schedule (or Home) that left
+the hub is free. A stop is done as soon as a read of the hub shows it, and a
+change you make later in the app wins (never sent again). The hub refreshes
+its data about every 90 s: a stop it answered is "not yet visible" until a
+read sent at least 90 s after its answer; if that read does not show it, or
+the hub did not answer, the stop is sent again with the next reads (by
+number, and by name when the name can be sent), 3 times at most, and the
+status and the badge of the zone say so. A change made in the app during that
+window cannot be told from a stop not applied: it may be overwritten, 3 times
+at most. A newer Schedule (or Home) that left
 lifts the stop: it is not sent again, not even after a restart. A Schedule (or
 Home) refused before leaving (option off, pause, too late) leaves the stop to
 be sent. A command asked before a standby on the same zone (before an away, on

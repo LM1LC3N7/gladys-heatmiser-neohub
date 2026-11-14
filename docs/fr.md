@@ -48,15 +48,23 @@ thermostats en veille et coupe les horloges et les neoPlug. Elles partent tout
 de suite, avant toute autre commande en attente (une lecture du hub bloquée
 depuis 1 s est coupée pour elles), adressées par le numéro d'appareil de la
 zone ; les veilles d'une scène partent ensemble en une commande. Un hub qui
-refuse les numéros, ou y répond sans rien faire, reçoit la zone par le nom que
-lui donne sa dernière lecture (une commande par zone), tout de suite et
-ensuite. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
-d'ici là reste dans la file et part dès que le hub est libre. Un arrêt est
-jugé sur la première lecture du hub partie après sa réponse : si elle le
-montre, c'est fait, et un changement fait ensuite dans l'app l'emporte (jamais
-renvoyé) ; sinon, ou si le hub n'a pas répondu, l'arrêt est renvoyé avec les
-prochaines lectures, 3 fois au plus, et le statut et le badge de la zone le
-disent. Un Programme (ou Présent) plus
+refuse les numéros reçoit tout de suite la zone par le nom que lui donne sa
+dernière lecture (une commande par zone) ; un hub qui répond aux numéros sans
+rien faire la reçoit par son nom au renvoi (environ 90 s plus tard, voir
+plus bas). Dès qu'un nom a marché là où le numéro n'a pas marché, ce hub
+reçoit des noms ensuite, même après un redémarrage ; une zone dont le nom
+contient une apostrophe, un guillemet ou une barre oblique inverse part
+toujours par son numéro. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
+d'ici là reste dans la file et part dès que le hub est libre. Un arrêt est fait
+dès qu'une lecture du hub le montre, et un changement fait ensuite dans l'app
+l'emporte (jamais renvoyé). Le hub rafraîchit ses données environ toutes les
+90 s : un arrêt auquel il a répondu est « pas encore visible » jusqu'à une
+lecture partie au moins 90 s après sa réponse ; si cette lecture ne le montre
+pas, ou si le hub n'a pas répondu, l'arrêt est renvoyé avec les prochaines
+lectures (par numéro, et par nom quand le nom peut partir), 3 fois au plus, et
+le statut et le badge de la zone le disent. Un changement fait dans l'app
+pendant cette fenêtre ne se distingue pas d'un arrêt non appliqué : il peut
+être écrasé, 3 fois au plus. Un Programme (ou Présent) plus
 récent parti lève l'arrêt : il n'est plus renvoyé, même après un redémarrage.
 Un Programme (ou Présent) refusé avant de partir (option désactivée, pause,
 trop tard) laisse l'arrêt partir. Une commande demandée avant une mise en

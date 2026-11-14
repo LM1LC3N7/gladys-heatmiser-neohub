@@ -179,6 +179,10 @@ export const T = {
       `Answered by the hub but not applied (sent again): ${list.en}.`,
       `Répondu par le hub mais pas appliqué (renvoyé) : ${list.fr}.`,
     ),
+  guardNotVisible: both(
+    'A standby or an away answered by the hub is not yet visible in its data (refreshed about every 90 s).',
+    'Une mise en veille ou une absence répondue par le hub n’est pas encore visible dans ses données (rafraîchies environ toutes les 90 s).',
+  ),
   guardPending: both(
     'A standby or an away was not answered by the hub yet: it is sent again with the next reads.',
     'Une mise en veille ou une absence n’a pas encore eu de réponse du hub : elle est renvoyée avec les prochaines lectures.',
@@ -336,20 +340,12 @@ export const ERRORS = {
     'Envoyé ; en attente de la réponse du hub : les prochaines lectures le montreront.',
   ),
   protectiveContradicted: both(
-    'Answered by the hub, but its next read does not show it: sent again with the next reads (3 times at most).',
-    'Répondu par le hub, mais sa lecture suivante ne le montre pas : renvoyé avec les prochaines lectures (3 fois au plus).',
-  ),
-  zoneNameUnknown: both(
-    'Not sent: the hub needs the name of the zone, not known yet (after the next read).',
-    'Pas envoyé : le hub demande le nom de la zone, pas encore connu (après la prochaine lecture).',
-  ),
-  numbersRefused: both(
-    'The hub refused the device number: try again, the name of the zone will be used.',
-    'Le hub a refusé le numéro d’appareil : réessayez, le nom de la zone sera utilisé.',
+    'Answered by the hub, but its data still does not show it 90 s later: sent again with the next reads (3 times at most).',
+    'Répondu par le hub, mais ses données ne le montrent toujours pas 90 s plus tard : renvoyé avec les prochaines lectures (3 fois au plus).',
   ),
   protectiveAccepted: both(
-    'Sent and answered by the hub; the next read decides (sent again if it does not show it).',
-    'Envoyé et répondu par le hub ; la prochaine lecture décide (renvoyé si elle ne le montre pas).',
+    'Sent and answered by the hub; not yet visible in its data (refreshed about every 90 s): sent again if a read 90 s later does not show it.',
+    'Envoyé et répondu par le hub ; pas encore visible dans ses données (rafraîchies environ toutes les 90 s) : renvoyé si une lecture 90 s plus tard ne le montre pas.',
   ),
   zoneOffline: both(
     'Not sent: the thermostat is offline.',

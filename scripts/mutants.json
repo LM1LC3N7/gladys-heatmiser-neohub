@@ -336,40 +336,10 @@
     "to": "return { sent: false, included: done, error: ERRORS.tokenRefused };"
   },
   {
-    "name": "B-1 zone addressed by its name",
-    "file": "src/app.js",
-    "from": "form === 'name' ? fresh.get(j).zone.rawName : j.target.zone,",
-    "to": "fresh.get(j).zone?.rawName ?? j.target.zone,"
-  },
-  {
     "name": "I-1 lifted guard still sent",
     "file": "src/app.js",
     "from": ".filter(([k, g]) => g && this.guards.get(k) === g && !this.lifted(k, g)),",
     "to": ".filter(([k, g]) => g && this.guards.get(k) === g),"
-  },
-  {
-    "name": "I-8 R10 guard settled by an older read",
-    "file": "src/app.js",
-    "from": "if (shown && (decisive || at >= (guard.sentAt ?? -Infinity))) {",
-    "to": "if (shown) {"
-  },
-  {
-    "name": "B-2 an answered stop taken as done without a read",
-    "file": "src/app.js",
-    "from": "      } else if (decisive && !shown && !guard.decided) {",
-    "to": "      } else if (false) {"
-  },
-  {
-    "name": "B-2 no fallback by name after a refusal of numbers",
-    "file": "src/app.js",
-    "from": "      if (!result.numbersRefused) {",
-    "to": "      if (true) {"
-  },
-  {
-    "name": "B-2 contradiction does not switch to names",
-    "file": "src/app.js",
-    "from": "          this.forms.set(hubId, 'name');\n",
-    "to": ""
   },
   {
     "name": "N6 different setpoints grouped",
@@ -412,5 +382,107 @@
     "file": "src/app.js",
     "from": "      this.unit === undefined &&\n",
     "to": "      false &&\n"
+  },
+  {
+    "name": "M1 contradiction decided before the live data refreshes",
+    "file": "src/app.js",
+    "from": "at >= guard.answeredAt + TIMINGS.liveLag",
+    "to": "at >= guard.answeredAt"
+  },
+  {
+    "name": "B-3 contradiction never decided",
+    "file": "src/app.js",
+    "from": "        guard.awaiting = false;\n        guard.contradicted = true;",
+    "to": "        guard.awaiting = true;\n        guard.contradicted = false;"
+  },
+  {
+    "name": "B-3 names proven without proof",
+    "file": "src/app.js",
+    "from": "      if (refusedNumbers && result.answered) this.proveNames(hub);",
+    "to": "      if (result.answered) this.proveNames(hub);"
+  },
+  {
+    "name": "B-3 no proof by a contradicted number then a name shown",
+    "file": "src/app.js",
+    "from": "        if (guard.wasContradicted && guard.form === 'name' && guard.kind === 'standby') {",
+    "to": "        if (false) {"
+  },
+  {
+    "name": "B-3 unsafe name not sent by number",
+    "file": "src/app.js",
+    "from": "batch.kind === 'away' ? keys : keys.filter((k) => !names || this.nameOf(k) === undefined);",
+    "to": "batch.kind === 'away' ? keys : keys.filter(() => !names);"
+  },
+  {
+    "name": "B-3 contradicted stop not sent by name",
+    "file": "src/app.js",
+    "from": "(names || batch.guards.get(k).contradicted === true)",
+    "to": "names"
+  },
+  {
+    "name": "m-16 names not kept in /data",
+    "file": "src/app.js",
+    "from": "    for (const hub of saved.names) this.forms.set(hub, 'name');\n",
+    "to": ""
+  },
+  {
+    "name": "I-10 Home in names mode",
+    "file": "src/app.js",
+    "from": "          if (command === API.commands.awayOff) return 0;\n",
+    "to": ""
+  },
+  {
+    "name": "M2 setpoint not retried by name",
+    "file": "src/app.js",
+    "from": "          form = 'name';\n          await send(form);\n          this.proveNames(hub);",
+    "to": "          throw err;"
+  },
+  {
+    "name": "M4 command ack waits past 3.4 s",
+    "file": "src/app.js",
+    "from": "      Math.max(0, answerBy - answeredAt),",
+    "to": "      Math.max(0, answerBy - answeredAt) + 4000,"
+  },
+  {
+    "name": "M11 stop ack waits for the publication",
+    "file": "src/app.js",
+    "from": "    this.refreshStatus().catch(() => {});\n    if (outcome.late) {",
+    "to": "    await this.refreshStatus().catch(() => {});\n    if (outcome.late) {"
+  },
+  {
+    "name": "M13 slow /data reread only after 10 s",
+    "file": "src/app.js",
+    "from": "err?.code === 'ETIMEDOUT' ? 0 : TIMINGS.dataRetry",
+    "to": "TIMINGS.dataRetry"
+  },
+  {
+    "name": "m-19 stop keeps the commands waiting for a read back",
+    "file": "src/app.js",
+    "from": "    for (const entry of this.unchecked.splice(0)) {",
+    "to": "    for (const entry of [].splice(0)) {"
+  },
+  {
+    "name": "not yet visible not told",
+    "file": "src/app.js",
+    "from": "    } else if ([...this.guards.values()].some((g) => g.awaiting && !g.shown)) {",
+    "to": "    } else if (false) {"
+  },
+  {
+    "name": "B-1 zone addressed by its name",
+    "file": "src/app.js",
+    "from": "return f === 'name' && isSafeName(name) ? name : job.target.zone;",
+    "to": "return isSafeName(name) ? name : job.target.zone;"
+  },
+  {
+    "name": "I-8 R10 guard settled by an older read",
+    "file": "src/app.js",
+    "from": "if (shown && at >= (guard.sentAt ?? -Infinity)) {",
+    "to": "if (shown) {"
+  },
+  {
+    "name": "B-2 no fallback by name after a refusal of numbers",
+    "file": "src/app.js",
+    "from": "      if (result.numbersRefused) {",
+    "to": "      if (false) {"
   }
 ]
