@@ -19,7 +19,10 @@ the notes of the version's GitHub Release.
 - Standby (frost protection) of a zone and the away mode of the hub need no
   option; setpoints, the return to the schedule and leaving the away mode stay
   off until "Allow heating commands" is on, with a ceiling (24 °C by default).
-- The certificate of the hub is pinned: confirmed on the first click of "Test
-  the connection" or typed; the token is never sent to another certificate.
+- The certificate of the hub is pinned: learnt on the first click of "Test
+  the connection" (not verified: the guide tells how to compare it) or typed;
+  the token is never sent to another certificate.
+- Zones are commanded by their device number; the standbys of a scene leave
+  together, as do equal setpoints; Gladys gets its answer within ~3.4 s.
 - Store: `countries: ["GB"]` (Heatmiser is a UK brand), hence
   `gladys_version >= 5.3.0`.

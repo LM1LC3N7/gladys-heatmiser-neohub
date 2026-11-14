@@ -13,7 +13,8 @@ bienvenus.
   pièce, la consigne, et le mode : **Programme** (la zone suit son programme)
   ou **Veille** (hors gel : la zone tient sa température hors gel).
 - Un appareil pour le **hub** : le **mode absence** (Présent / Absent). Absent
-  met toutes les zones en veille.
+  met tous les thermostats en veille et coupe les horloges et les neoPlug (PDF
+  de Heatmiser) : il agit sur tout ce que le hub pilote.
 - Les horloges, les prises et la partie horloge d'un neoAir combiné ne sont pas
   affichées dans cette version.
 
@@ -22,55 +23,79 @@ bienvenus.
 1. Dans l'app **Heatmiser Neo** : Paramètres > API Access > Tokens, créez un jeton.
 2. Dans Gladys, ouvrez l'intégration : saisissez l'**adresse IP** du hub (visible
    dans votre box ; donnez-lui une adresse fixe) et le **jeton**, enregistrez.
-3. Cliquez une fois sur **Tester la connexion** : le certificat présenté par le
-   hub est lu et confirmé (son empreinte s'affiche). Ensuite, le jeton ne part
-   que vers ce certificat. Vous pouvez aussi saisir vous-même l'empreinte SHA-256.
+3. Cliquez une fois sur **Tester la connexion**, **depuis votre réseau
+   domestique** : le certificat présenté par le hub est lu et son empreinte
+   **apprise** (affichée dans la réponse et dans le statut). Elle est apprise,
+   **pas vérifiée** : le hub fabrique son propre certificat, aucune autorité ne
+   permet de le contrôler. Quelqu'un qui contrôle votre réseau local à ce clic
+   précis pourrait faire apprendre son propre certificat et recevoir le jeton.
+   Pour vérifier, comparez l'empreinte affichée avec celle de votre hub, lue
+   depuis un ordinateur de votre réseau : `openssl s_client -connect <adresse du
+hub>:4243 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256`.
+   Vous pouvez aussi saisir l'empreinte vous-même au lieu de cliquer. Ensuite,
+   le jeton ne part que vers ce certificat.
 4. Ouvrez l'onglet **Découverte** et ajoutez les zones et le hub.
 
 Le jeton est gardé par Gladys dans sa base, jamais réaffiché, et envoyé
-seulement au hub à l'adresse saisie, sur son certificat confirmé. Il n'apparaît
-ni dans les journaux, ni dans le statut, ni dans les fichiers de l'intégration.
+seulement au hub à l'adresse saisie, sur le certificat appris. Il n'apparaît ni
+dans les journaux, ni dans le statut, ni dans les fichiers de l'intégration.
 
 ## Commandes
 
-La **Veille** d'une zone et l'**Absence** du hub ne font que baisser le
-chauffage : elles sont permises quelles que soient les options, et
-partent tout de suite, avant toute autre commande en attente (une lecture du
-hub bloquée depuis 1 s est coupée pour elles). Si l'une ne peut pas partir, ou
-si le hub ne la montre pas encore, elle est renvoyée avec les prochaines
-lectures du hub, 3 fois au plus. Une commande demandée avant une mise en veille
-de la même zone (avant une absence, sur toute zone) et pas encore partie est
-annulée. Ce dont une veille ou une absence a besoin malgré tout : l'adresse, le
-jeton et le certificat confirmé (sans eux, rien ne peut partir vers le hub).
-Une veille est aussi refusée quand le nom de la zone n'est pas encore connu ou
-contient une apostrophe ou une barre oblique inverse, et les deux sont refusées
-quand un autre hub répond à l'adresse.
+La **Veille** d'une zone et l'**Absence** du hub ne demandent aucune option.
+La veille ne fait que baisser le chauffage de sa zone ; l'absence met tous les
+thermostats en veille et coupe les horloges et les neoPlug. Elles partent tout
+de suite, avant toute autre commande en attente (une lecture du hub bloquée
+depuis 1 s est coupée pour elles), adressées par le numéro d'appareil de la
+zone (jamais par son nom) ; les veilles d'une scène partent ensemble en une
+commande. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
+d'ici là reste dans la file et part dès que le hub est libre. Un arrêt sans
+réponse du hub est renvoyé avec les prochaines lectures, 3 fois au plus ; un
+arrêt auquel le hub a répondu sans erreur n'est pas renvoyé, même si ses
+données ne le montrent pas encore : si vous remettez entre-temps la zone sur
+son programme dans l'app, votre choix l'emporte. Un Programme (ou Présent) plus
+récent parti lève l'arrêt : il n'est plus renvoyé, même après un redémarrage.
+Un Programme (ou Présent) refusé avant de partir (option désactivée, pause,
+trop tard) laisse l'arrêt partir. Une commande demandée avant une mise en
+veille de la même zone (avant une absence, sur toute zone) et pas encore partie
+est annulée. Ce dont un arrêt a besoin malgré tout : l'adresse, le jeton et le
+certificat appris (sans eux, rien ne peut partir vers le hub) ; il est refusé
+quand un autre hub répond à l'adresse, et il n'est pas renvoyé tout seul après
+un refus du jeton par le hub (un clic l'envoie, ou un nouveau jeton).
 
 Ces commandes sont **désactivées par défaut** et demandent l'option
 **Autoriser les commandes de chauffage** :
 
-- la **consigne** d'une zone (de 5 °C au plafond, 24 °C par défaut, par pas de
-  0,5 °C) ;
+- la **consigne** d'une zone (de 5 °C au plafond, 24 °C par défaut, arrondi à
+  0,5 °C vers le bas, par pas de 0,5 °C) ;
 - **Programme** sur une zone (quitte la veille) ;
 - **Présent** sur le hub (quitte le mode absence).
 
-Chacune est décidée sur une lecture fraîche du hub (le hub et la zone vérifiés :
-une zone renommée dans l'app est de nouveau commandée une fois l'appareil mis à
-jour depuis l'onglet Découverte), envoyée en 3,5 s ou refusée sans envoi, puis
-relue. Une consigne est refusée :
+Chacune est décidée sur une lecture fraîche du hub (une lecture partie après
+l'arrivée de la commande ; le hub, la zone à son numéro d'appareil et son nom à
+la lecture précédente vérifiés), adressée par le numéro d'appareil de la zone,
+envoyée en 2,8 s ou refusée sans envoi, puis relue quand aucune autre commande
+n'attend ; Gladys a sa réponse en 3,4 s environ. La même consigne (ou le même
+Programme) demandée à plusieurs zones à la fois part en une commande ; des
+consignes différentes partent l'une après l'autre, chacune dans ses 2,8 s, les
+autres refusées sans envoi (« trop tard »). Une consigne est refusée :
 
 - quand l'option est désactivée, ou que la valeur sort de 5 °C au plafond ou
   n'est pas un multiple de 0,5 °C ;
 - tant que la zone est en veille, absente ou en vacances, ou que le hub est
   absent ou en vacances (choisissez d'abord Programme ou Présent) ;
 - pendant 10 minutes après une mise en veille de la zone ou une absence du hub,
-  sauf si Programme ou Présent a été choisi depuis ;
+  sauf si Programme ou Présent est parti depuis ;
 - quand le hub est réglé en °F (seul le °C est pris en charge), ou que son unité
-  n'est pas encore lue ;
-- quand la zone est hors ligne, renommée, disparue, ou que son nom contient une
-  apostrophe ou une barre oblique inverse ;
+  n'est pas encore lue (de nouveau après tout changement du système du hub) ;
+- quand la zone est hors ligne, disparue, pas encore lue, ou renommée depuis la
+  lecture précédente (réessayez) ;
 - quand 8 commandes attendent déjà, pendant une pause après des lectures en
-  échec, après un jeton refusé, ou quand le hub est trop lent (rien envoyé).
+  échec, après un jeton refusé, ou quand son tour ne vient pas à temps (rien
+  envoyé).
+
+Programme et Présent sont refusés quand /data ne peut pas garder qu'ils lèvent
+un arrêt (rien envoyé).
 
 Une commande qui a pu atteindre le hub n'est jamais dite « pas envoyée » : vous
 obtenez « envoyé, sans confirmation » et les prochaines lectures montrent le
@@ -94,5 +119,5 @@ configuration après avoir vérifié qu'il s'agit bien de votre hub.
 ## Données
 
 `/data/heatmiser-neohub-state.json` garde l'heure de la dernière lecture, la
-pause, les empreintes de certificat confirmées, les commandes d'arrêt encore à
+pause, les empreintes de certificat apprises, les commandes d'arrêt encore à
 envoyer et, pour un jeton refusé, une étiquette de 8 bits (jamais le jeton).

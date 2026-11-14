@@ -126,16 +126,20 @@ export const TIMINGS = {
   /** The button waits 30 s in Gladys: it answers by 25 s. */
   testBudget: 25 * SECOND,
   /**
-   * Commands (Gladys waits 5 s for the ack): the fresh read and the command
-   * must leave by 3.5 s after the click, or the command is refused unsent;
-   * the answer is awaited until 4.3 s, after which the command is "sent,
-   * without confirmation".
+   * Commands (Gladys waits 5 s for the ack; the ack comes by ~3.4 s): the
+   * fresh read and the command must leave by 2.8 s after the click, or the
+   * command is refused unsent (its turn in the queue or the lane is not
+   * awaited longer); the answer is awaited until 3.4 s, after which the
+   * command is "sent, without confirmation". A standby or an away answers by
+   * 3.4 s too, and keeps on being sent after its ack when the hub is busy.
    */
-  commandSendBy: 3_500,
-  commandAnswerBy: 4_300,
-  /** The fresh read of a command: 2.5 s at most, and 0.3 s left to send after it. */
-  commandReadMax: 2_500,
+  commandSendBy: 2_800,
+  commandAnswerBy: 3_400,
+  /** The fresh read of a command: 1.8 s at most, and 0.3 s left to send after it. */
+  commandReadMax: 1_800,
   commandMinSend: 300,
+  /** The first command waits this long for the others of a scene (then grouped). */
+  gather: 50,
   /** Commands waiting their turn (a scene setting several zones), served one at a time. */
   commandQueue: 8,
   /** Reads after a command: its effect, then a check; never skipped (they wait their turn). */

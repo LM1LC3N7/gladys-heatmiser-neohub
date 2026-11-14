@@ -32,8 +32,8 @@
   {
     "name": "protective not first",
     "file": "src/neohub/client.js",
-    "from": "(priority ? this.high : this.low).push(",
-    "to": "this.low.push("
+    "from": "const list = priority ? this.high : this.low;",
+    "to": "const list = this.low;"
   },
   {
     "name": "no cut of a stuck read",
@@ -90,7 +90,7 @@
     "to": "        false\n"
   },
   {
-    "name": "\u00b0F setpoint allowed",
+    "name": "°F setpoint allowed",
     "file": "src/app.js",
     "from": "      if (this.unit !== 'C') {",
     "to": "      if (false) {"
@@ -130,12 +130,6 @@
     "file": "src/app.js",
     "from": "zone.rawName !== expected",
     "to": "false"
-  },
-  {
-    "name": "send deadline not checked in beforeSend",
-    "file": "src/app.js",
-    "from": "          if (this.monotonic() >= sendBy) {\n            throw this.lateError(ahead);",
-    "to": "          if (false) {\n            throw this.lateError(ahead);"
   },
   {
     "name": "cut read counted as failure",
@@ -230,14 +224,14 @@
   {
     "name": "a newer command that left does not lift the guard",
     "file": "src/app.js",
-    "from": "return (this.lastLeft.get(key) ?? 0) > guard.seq;",
-    "to": "return false;"
+    "from": "return guard.liftPending === true || (this.lastLeft.get(key) ?? 0) > guard.seq;",
+    "to": "return guard.liftPending === true;"
   },
   {
     "name": "token refused after the send called not sent",
     "file": "src/app.js",
-    "from": "return { sent: true, error: ERRORS.tokenRefusedSent };",
-    "to": "return { sent: false, error: ERRORS.tokenRefused };"
+    "from": "return { sent: true, included: keys, error: ERRORS.tokenRefusedSent };",
+    "to": "return { sent: false, included: keys, error: ERRORS.tokenRefused };"
   },
   {
     "name": "/data written before it is read",
@@ -248,7 +242,121 @@
   {
     "name": "protective refused before the configuration",
     "file": "src/app.js",
-    "from": "    if (!this.configLoaded) {\n      return { error: ERRORS.protectiveLater };\n    }\n",
-    "to": "    if (!this.configLoaded) {\n      return { error: ERRORS.configNotLoaded };\n    }\n"
+    "from": "      return Promise.resolve({ error: ERRORS.protectiveLater });\n    }\n    if (!this.client) {",
+    "to": "      return Promise.resolve({ error: ERRORS.configNotLoaded });\n    }\n    if (!this.client) {"
+  },
+  {
+    "name": "B-1 zone addressed by its name",
+    "file": "src/app.js",
+    "from": "          const ids = sending.map((j) => j.target.zone);",
+    "to": "          const ids = sending.map((j) => fresh.get(j).zone?.rawName ?? j.target.zone);"
+  },
+  {
+    "name": "B-1 renamed zone commanded",
+    "file": "src/app.js",
+    "from": "    if (zone.rawName !== expected) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "I-1 lifted guard still sent",
+    "file": "src/app.js",
+    "from": "[...batch.guards].filter(([k, g]) => this.guards.get(k) === g && !this.lifted(k, g)),",
+    "to": "[...batch.guards].filter(([k, g]) => this.guards.get(k) === g),"
+  },
+  {
+    "name": "I-1 lift not written before Schedule",
+    "file": "src/app.js",
+    "from": "    for (const job of lifting) this.guards.get(job.target.key).liftPending = true;",
+    "to": "    for (const job of lifting) this.guards.get(job.target.key).liftPending = false;"
+  },
+  {
+    "name": "I-2 resend with a refused token",
+    "file": "src/app.js",
+    "from": "  async resendGuards(generation) {\n    if (this.refused) {\n      return;\n    }",
+    "to": "  async resendGuards(generation) {\n    if (false) {\n      return;\n    }"
+  },
+  {
+    "name": "I-3 ceiling rounded up",
+    "file": "src/config.js",
+    "from": "Math.floor(Math.max(SETPOINT.ceilingMin, Math.min(SETPOINT.max, value)) * 2) / 2",
+    "to": "Math.round(Math.max(SETPOINT.ceilingMin, Math.min(SETPOINT.max, value)))"
+  },
+  {
+    "name": "I-4 unit kept after a system change",
+    "file": "src/app.js",
+    "from": "    if (this.unit !== undefined && live.systemStamp !== this.systemStamp) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "I-6 lane awaited without a deadline",
+    "file": "src/neohub/client.js",
+    "from": "      if (Number.isFinite(until)) {",
+    "to": "      if (false) {"
+  },
+  {
+    "name": "I-7 no grouping of a scene",
+    "file": "src/app.js",
+    "from": "            job.wanted.command === head.wanted.command &&",
+    "to": "            false &&"
+  },
+  {
+    "name": "I-8 R9 closedFirst not reset by a success",
+    "file": "src/app.js",
+    "from": "    this.lastReason = undefined;\n    this.closedFirst = 0;",
+    "to": "    this.lastReason = undefined;"
+  },
+  {
+    "name": "I-8 R10 guard settled by an older read",
+    "file": "src/app.js",
+    "from": "guard.shown || !key.startsWith(`${hubId}-`) || at < (guard.sentAt ?? -Infinity)",
+    "to": "guard.shown || !key.startsWith(`${hubId}-`)"
+  },
+  {
+    "name": "I-8 R11 guard of another hub resent",
+    "file": "src/app.js",
+    "from": "      if (!hubs.has(hub)) continue;\n",
+    "to": ""
+  },
+  {
+    "name": "I-8 R16 stale values at deviceCreated",
+    "file": "src/app.js",
+    "from": "      !this.offline &&\n",
+    "to": ""
+  },
+  {
+    "name": "I-8 R28 protective to another hub",
+    "file": "src/app.js",
+    "from": "    if (this.hubId !== undefined && this.hubId !== target.hub) {\n      guard.pending = false;",
+    "to": "    if (false) {\n      guard.pending = false;"
+  },
+  {
+    "name": "m-3 an answered stop sent again",
+    "file": "src/app.js",
+    "from": "      // Answered without error: the hub took it; never sent again by the reads.\n      for (const g of included.values()) g.pending = false;",
+    "to": "      // Answered without error: the hub took it; never sent again by the reads."
+  },
+  {
+    "name": "m-4 pin in use dropped",
+    "file": "src/store.js",
+    "from": "    for (const [k, v] of [...others, ...inUse]) {",
+    "to": "    for (const [k, v] of [...valid].slice(0, 4)) {"
+  },
+  {
+    "name": "m-5 a new token taken for the refused one",
+    "file": "src/app.js",
+    "from": "    if (this.tokenChanged) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "m-6 follow-ups not grouped",
+    "file": "src/app.js",
+    "from": "      if (this.followUpBy.has(delay)) continue;",
+    "to": "      if (false) continue;"
+  },
+  {
+    "name": "I-5 /data written during its read",
+    "file": "src/app.js",
+    "from": "    // Nothing is written to /data until it has been read (it would overwrite the pins).\n    this.memoryUnreadable = true;",
+    "to": "    this.memoryUnreadable = false;"
   }
 ]

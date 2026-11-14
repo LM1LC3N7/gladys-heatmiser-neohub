@@ -43,7 +43,10 @@ export const MODE_NAMES = {
 
 export const AWAY_NAMES = {
   [AWAY.HOME]: both('Home', 'Présent'),
-  [AWAY.AWAY]: both('Away (every zone in standby)', 'Absent (toutes les zones en veille)'),
+  [AWAY.AWAY]: both(
+    'Away (thermostats in standby, time clocks off)',
+    'Absent (thermostats en veille, horloges coupées)',
+  ),
 };
 
 export const hubName = both('neoHub', 'neoHub');
@@ -67,7 +70,7 @@ export function reasonOf(err) {
     case 'size':
       return both('answer too large', 'réponse trop grande');
     case 'nopin':
-      return both('certificate not confirmed yet', 'certificat pas encore confirmé');
+      return both('certificate not known yet', 'certificat pas encore connu');
     case 'pin':
       return both('the certificate of the hub changed', 'le certificat du hub a changé');
     case 'token':
@@ -125,9 +128,14 @@ export const T = {
     ),
   connecting: both('Connecting to the neoHub…', 'Connexion au neoHub…'),
   noPin: both(
-    'The certificate of the hub is not confirmed yet: click "Test the connection" (or type its fingerprint). Nothing is sent before.',
-    'Le certificat du hub n’est pas encore confirmé : cliquez sur « Tester la connexion » (ou saisissez son empreinte). Rien n’est envoyé avant.',
+    'The certificate of the hub is not known yet: click "Test the connection" from your home network (or type its fingerprint). Nothing is sent before.',
+    'Le certificat du hub n’est pas encore connu : cliquez sur « Tester la connexion » depuis votre réseau domestique (ou saisissez son empreinte). Rien n’est envoyé avant.',
   ),
+  learnt: (fp) =>
+    both(
+      `Certificate fingerprint learnt on the first click, not verified: ${fp}. Compare it with the one of your hub (see the guide).`,
+      `Empreinte du certificat apprise au premier clic, non vérifiée : ${fp}. Comparez-la avec celle de votre hub (voir le guide).`,
+    ),
   pinChanged: (fp) =>
     both(
       `The certificate of the hub changed: nothing is sent (seen: ${fp ?? '?'}). If you replaced or reset the hub, type this fingerprint in the configuration.`,
@@ -167,8 +175,8 @@ export const T = {
       `Dernière commande pas visible dans le hub : ${list.fr}.`,
     ),
   guardPending: both(
-    'A standby or an away is not shown by the hub yet: it is sent again with the next reads.',
-    'Une mise en veille ou une absence n’apparaît pas encore dans le hub : elle est renvoyée avec les prochaines lectures.',
+    'A standby or an away was not answered by the hub yet: it is sent again with the next reads.',
+    'Une mise en veille ou une absence n’a pas encore eu de réponse du hub : elle est renvoyée avec les prochaines lectures.',
   ),
   andMore: (n) => both(` and ${n} more`, ` et ${n} de plus`),
   hub: both('the hub', 'le hub'),
@@ -193,8 +201,8 @@ export const T = {
       ),
     pinned: (fp) =>
       both(
-        `Certificate of the hub confirmed (${fp}); from now on the token goes to it only.`,
-        `Certificat du hub confirmé (${fp}) ; désormais le jeton n’est envoyé qu’à lui.`,
+        `Fingerprint of the certificate learnt, not verified: ${fp}. From now on the token goes to this certificate only; compare it with the one of your hub (see the guide).`,
+        `Empreinte du certificat apprise, non vérifiée : ${fp}. Désormais le jeton n’est envoyé qu’à ce certificat ; comparez-la avec celle de votre hub (voir le guide).`,
       ),
     pinNotSaved: (fp) =>
       both(
@@ -215,8 +223,8 @@ export const ERRORS = {
     'La configuration n’est pas encore lue : réessayez dans un instant.',
   ),
   heatingDisabled: both(
-    'Not sent: heating commands are off (option "Allow heating commands"). Standby and away always work.',
-    'Pas envoyé : les commandes de chauffage sont désactivées (option « Autoriser les commandes de chauffage »). La veille et l’absence fonctionnent toujours.',
+    'Not sent: heating commands are off (option "Allow heating commands"). Standby and away need no option.',
+    'Pas envoyé : les commandes de chauffage sont désactivées (option « Autoriser les commandes de chauffage »). La veille et l’absence ne demandent aucune option.',
   ),
   queueFull: (n) =>
     both(
@@ -299,24 +307,36 @@ export const ERRORS = {
     'Pas envoyé : cette zone n’est plus sur le hub.',
   ),
   zoneRenamed: both(
-    'Not sent: the zone has another name on the hub; update the device from the Discovery tab.',
-    'Pas envoyé : la zone porte un autre nom sur le hub ; mettez à jour l’appareil depuis l’onglet Découverte.',
+    'Not sent: the zone was renamed on the hub since the last read; try again.',
+    'Pas envoyé : la zone a été renommée sur le hub depuis la dernière lecture ; réessayez.',
   ),
-  zoneNameUnknown: both(
-    'Not sent: the name of the zone is not known yet; update the device from the Discovery tab.',
-    'Pas envoyé : le nom de la zone n’est pas encore connu ; mettez à jour l’appareil depuis l’onglet Découverte.',
+  zoneNotRead: both(
+    'Not sent: the zone has not been read yet; try again after the next read.',
+    'Pas envoyé : la zone n’a pas encore été lue ; réessayez après la prochaine lecture.',
   ),
-  nameNotSendable: both(
-    'Not sent: the zone name holds a quote or a backslash; rename the zone in the Heatmiser Neo app.',
-    'Pas envoyé : le nom de la zone contient une apostrophe ou une barre oblique inverse ; renommez la zone dans l’app Heatmiser Neo.',
+  liftNotSaved: both(
+    'Not sent: /data could not keep that the standby (or away) is lifted.',
+    'Pas envoyé : /data n’a pas pu garder la levée de la veille (ou de l’absence).',
+  ),
+  liftedBefore: both(
+    'Not sent: a newer "Schedule" or "Home" left before it.',
+    'Pas envoyé : un « Programme » ou « Présent » plus récent est parti avant.',
+  ),
+  protectiveSending: both(
+    'Being sent: the hub has not answered yet; it leaves as soon as the hub is free, then the next reads show it.',
+    'En cours d’envoi : le hub n’a pas encore répondu ; il part dès que le hub est libre, puis les prochaines lectures le montrent.',
+  ),
+  protectiveAccepted: both(
+    'Sent and accepted by the hub; its data does not show it yet (the next reads will).',
+    'Envoyé et accepté par le hub ; ses données ne le montrent pas encore (les prochaines lectures le montreront).',
   ),
   zoneOffline: both(
     'Not sent: the thermostat is offline.',
     'Pas envoyé : le thermostat est hors ligne.',
   ),
   noPin: both(
-    'Not sent: the certificate of the hub is not confirmed yet (click "Test the connection").',
-    'Pas envoyé : le certificat du hub n’est pas encore confirmé (cliquez sur « Tester la connexion »).',
+    'Not sent: the certificate of the hub is not known yet (click "Test the connection").',
+    'Pas envoyé : le certificat du hub n’est pas encore connu (cliquez sur « Tester la connexion »).',
   ),
   pinChanged: both(
     'Not sent: the certificate of the hub changed (see the status of the integration).',
@@ -351,8 +371,8 @@ export const ERRORS = {
     'Envoyé, mais le hub ne le montre pas encore : les prochaines lectures le diront.',
   ),
   protectiveUnconfirmed: both(
-    'Sent; not shown by the hub yet: sent again with the next reads (3 times at most) until it shows.',
-    'Envoyé ; pas encore visible dans le hub : renvoyé avec les prochaines lectures (3 fois au plus) jusqu’à ce qu’il apparaisse.',
+    'Sent, without an answer from the hub: sent again with the next reads (3 times at most) until the hub answers or shows it.',
+    'Envoyé, sans réponse du hub : renvoyé avec les prochaines lectures (3 fois au plus) jusqu’à ce que le hub réponde ou le montre.',
   ),
   protectiveLater: both(
     'Not sent now: sent again with the next reads (3 times at most).',

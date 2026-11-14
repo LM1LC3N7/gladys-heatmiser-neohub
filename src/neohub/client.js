@@ -58,7 +58,8 @@ export class NeoHubClient {
 
   // --- The lane ---------------------------------------------------------------
 
-  acquire(priority) {
+  /** The lane, waited for until `until` (monotonic) at most: past it, 'late' (nothing sent). */
+  acquire(priority, until) {
     const holder = { priority, startedAt: undefined, onCut: undefined, cut: false };
     if (!this.holder) {
       this.holder = holder;
@@ -68,12 +69,28 @@ export class NeoHubClient {
     if (priority) {
       this.armCut();
     }
-    return new Promise((resolve) => {
-      (priority ? this.high : this.low).push(() => {
+    return new Promise((resolve, reject) => {
+      const list = priority ? this.high : this.low;
+      let timer;
+      const turn = () => {
+        this.timers.clearTimeout(timer);
         this.holder = holder;
         holder.startedAt = this.monotonic();
         resolve(holder);
-      });
+      };
+      list.push(turn);
+      if (Number.isFinite(until)) {
+        timer = this.timers.setTimeout(
+          () => {
+            const i = list.indexOf(turn);
+            if (i >= 0) {
+              list.splice(i, 1);
+              reject(new NeoHubError('late', 'its turn did not come in time'));
+            }
+          },
+          Math.max(0, until - this.monotonic()),
+        );
+      }
     });
   }
 
@@ -301,39 +318,48 @@ export class NeoHubClient {
 
   /**
    * One command (a name of API.commands and its argument) -> `{ hubId,
-   * response }`. Options: `deadline` (monotonic: not sent past it, the answer
-   * awaited until it), `priority` (a protective command), `beforeSend()`,
-   * `onSent()` (the command left).
+   * response }`. Options: `deadline` (monotonic: the answer awaited until
+   * it), `sendBy` (not sent past it, the turn in the lane awaited until it;
+   * the deadline when absent), `priority` (a protective command),
+   * `beforeSend()`, `onSent()` (the command left). `argument` may be a
+   * function, called right before the first byte (after `beforeSend`).
    */
-  async request(name, argument, { deadline, priority = false, beforeSend, onSent } = {}) {
-    const command = encodeCommand(name, argument);
-    const holder = await this.acquire(priority);
+  async request(
+    name,
+    argument,
+    { deadline, sendBy = deadline, priority = false, beforeSend, onSent } = {},
+  ) {
+    if (typeof argument !== 'function') {
+      encodeCommand(name, argument);
+    }
+    const holder = await this.acquire(priority, sendBy);
     try {
-      return await this.exchange(holder, command, { deadline, beforeSend, onSent });
+      return await this.exchange(holder, name, argument, { deadline, sendBy, beforeSend, onSent });
     } finally {
       this.release(holder);
     }
   }
 
-  async exchange(holder, command, { deadline, beforeSend, onSent }) {
+  async exchange(holder, name, argument, { deadline, sendBy, beforeSend, onSent }) {
     if (this.stopped) {
       throw new NeoHubError('stopped', 'stopped');
     }
     if (holder.cut) {
       throw new NeoHubError('cut', 'cut for a protective command');
     }
-    if (this.monotonic() >= deadline) {
+    if (this.monotonic() >= sendBy) {
       throw new NeoHubError('late', 'too late to send');
     }
-    const ws = await this.open(holder, deadline);
+    const ws = await this.open(holder, sendBy);
     if (holder.cut) {
       throw new NeoHubError('cut', 'cut for a protective command');
     }
-    if (this.monotonic() >= deadline) {
+    if (this.monotonic() >= sendBy) {
       throw new NeoHubError('late', 'too late to send');
     }
     // May throw: nothing sent.
     beforeSend?.();
+    const command = encodeCommand(name, typeof argument === 'function' ? argument() : argument);
     this.nextId = this.nextId >= 1e9 ? 1 : this.nextId + 1;
     const id = this.nextId;
     const first = !this.answered;

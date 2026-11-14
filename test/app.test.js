@@ -133,9 +133,9 @@ test('no pin: nothing is sent; the first click of the button pins the certificat
   const { world, gladys, start, act, app } = await setup({ store, config });
   await start();
   assert.equal(world.sent.length, 0);
-  assert.match(gladys.fake.connectionStatus.message.en, /not confirmed yet/);
+  assert.match(gladys.fake.connectionStatus.message.en, /not known yet/);
   const ack = await act(gladys.fake.action('test_connection'));
-  assert.match(ack.data.message.en, /confirmed/);
+  assert.match(ack.data.message.en, /learnt, not verified/);
   assert.equal(world.count('GET_LIVE_DATA'), 1);
   assert.equal(Object.values(store.data.pins)[0], PIN);
   assert.equal(world.clients.at(-1).options.pin, PIN);
@@ -262,7 +262,7 @@ test('a setpoint: decided on a fresh read, sent, confirmed by the read back', as
   const ack = await cmd(F('target-temperature'), 22.5);
   assert.equal(ack.success, true, ack.error);
   const set = world.sent.find((s) => s.name === 'SET_TEMP');
-  assert.deepEqual(set.argument, [22.5, ['Living room']]);
+  assert.deepEqual(set.argument, [22.5, [1]], 'the zone by its device number');
   assert.equal(world.count('GET_LIVE_DATA'), reads + 2, 'a fresh read before, a read back after');
   assert.equal(state(F('target-temperature')), 22.5);
 });
@@ -311,12 +311,13 @@ test('identity: a renamed zone or another hub is never commanded', async () => {
   world.zones[0].ZONE_NAME = 'Kitchen';
   let ack = await cmd(F('target-temperature'), 20);
   assert.equal(ack.success, false);
-  assert.match(ack.error, /autre nom/);
+  assert.match(ack.error, /renommée/);
   world.zones[0].ZONE_NAME = 'Living room';
   world.hubId = 'aabbccddeeff';
   await wait(MINUTE);
   ack = await cmd(F('target-temperature'), 20);
   assert.equal(ack.success, false);
+  assert.match(ack.error, /autre hub/);
   assert.equal(world.count('SET_TEMP'), 0);
 });
 
@@ -343,17 +344,16 @@ test('a read back equal to the state before is "not applied", told in the status
   assert.match(gladys.fake.connectionStatus.message.en, /not shown by the hub: Living room/);
 });
 
-test('a scene on 5 slow zones sets all 5; a zone failing does not stop the others', async () => {
-  const zones = [1, 2, 3, 4, 5].map((id) => ZONE({ DEVICE_ID: id, ZONE_NAME: `Room ${id}` }));
+test('a scene on 5 slow zones (900 ms) sets all 5 in one command; an offline zone does not stop the others', async () => {
+  const zones = [1, 2, 3, 4, 5].map((id) =>
+    ZONE({ DEVICE_ID: id, ZONE_NAME: `Room ${id}`, OFFLINE: id === 3 }),
+  );
   const world = fakeHub({ zones });
   const devices = zones.map((z) => created(z));
-  const { gladys, start, act } = await setup({ world, config: ON, devices });
+  const { gladys, clock, start, act } = await setup({ world, config: ON, devices });
   await start();
-  world.latency = 200;
-  world.fail = (name, arg) =>
-    name === 'SET_TEMP' && arg[1][0] === 'Room 3'
-      ? { kind: 'hub', sent: true, text: 'error' }
-      : undefined;
+  world.latency = 900;
+  const asked = clock.now;
   const acks = await act(
     Promise.all(
       devices.map((d, i) =>
@@ -365,7 +365,44 @@ test('a scene on 5 slow zones sets all 5; a zone failing does not stop the other
     acks.map((a) => a.success),
     [true, true, false, true, true],
   );
-  assert.equal(world.count('SET_TEMP'), 5);
+  assert.match(acks[2].error, /hors ligne/);
+  const sets = world.sent.filter((s) => s.name === 'SET_TEMP');
+  assert.deepEqual(
+    sets.map((s) => s.argument),
+    [[19, [1, 2, 4, 5]]],
+  );
+  assert.ok(sets[0].at - asked < 2800, 'sent within the deadline');
+});
+
+test('a scene of 5 different setpoints: each sent within its deadline or refused unsent, never late', async () => {
+  const zones = [1, 2, 3, 4, 5].map((id) => ZONE({ DEVICE_ID: id, ZONE_NAME: `Room ${id}` }));
+  const world = fakeHub({ zones });
+  const devices = zones.map((z) => created(z));
+  const { gladys, clock, start, act } = await setup({ world, config: ON, devices });
+  await start();
+  world.latency = 500;
+  const asked = clock.now;
+  const acked = [];
+  const acks = await act(
+    Promise.all(
+      devices.map((d, i) =>
+        gladys.fake
+          .setValue(d, { external_id: F('target-temperature', i + 1) }, 17 + i)
+          .then((a) => {
+            acked.push(clock.now - asked);
+            return a;
+          }),
+      ),
+    ),
+  );
+  for (const at of acked) assert.ok(at <= 3500, `ack after ${at} ms`);
+  for (const s of world.sent.filter((x) => x.name === 'SET_TEMP')) {
+    assert.ok(s.at - asked < 2800, `sent at ${s.at - asked} ms`);
+  }
+  assert.ok(acks.filter((a) => a.success || /Envoyé/.test(a.error)).length >= 2);
+  for (const a of acks.filter((x) => !x.success && !/Envoyé/.test(x.error))) {
+    assert.match(a.error, /^Pas envoyé/);
+  }
 });
 
 // --- Protective commands -----------------------------------------------------------
@@ -376,7 +413,7 @@ test('standby is sent with the option off, during a pause, with a refused token,
   await start();
   let ack = await cmd(F('mode'), 'standby');
   assert.equal(ack.success, true, ack.error);
-  assert.deepEqual(world.sent.find((s) => s.name === 'FROST_ON').argument, ['Living room']);
+  assert.deepEqual(world.sent.find((s) => s.name === 'FROST_ON').argument, [1]);
   // During a pause after failed reads.
   world.zones[0].STANDBY = false;
   world.fail = (name) => (name === 'GET_LIVE_DATA' ? { kind: 'network', sent: false } : undefined);
@@ -463,10 +500,11 @@ test('a standby not shown is sent again by the reads, 3 times at most', async ()
   const world = fakeHub();
   const { start, cmd, wait, gladys } = await setup({ world });
   await start();
-  world.apply = false;
+  // The hub never answers it (the reads still work).
+  world.hang = (name) => name === 'FROST_ON';
   const ack = await cmd(F('mode'), 'standby');
   assert.equal(ack.success, false);
-  assert.match(ack.error, /renvoyé avec les prochaines lectures/);
+  await wait(15 * SECOND);
   assert.match(gladys.fake.connectionStatus.message.en, /sent again/);
   await wait(10 * MINUTE);
   assert.equal(world.count('FROST_ON'), 4);
@@ -617,12 +655,16 @@ test('the option is checked on arrival (no read at all) and again right before s
 
 test('a "Schedule" being read when a standby arrives is not sent after it', async () => {
   const world = fakeHub({ zones: [ZONE({ STANDBY: true })] });
-  const { gladys, start, act } = await setup({ world, config: ON });
+  const { app, gladys, start, act, advance } = await setup({ world, config: ON });
   await start();
   world.latency = 600;
   const device = gladys.devices[0];
   const schedule = gladys.fake.setValue(device, { external_id: F('mode') }, 'schedule');
   await settle();
+  // Past the gathering of a scene: its fresh read is in flight.
+  await advance(100);
+  await settle();
+  assert.equal(app.commands.length, 0);
   const standby = gladys.fake.setValue(device, { external_id: F('mode') }, 'standby');
   const [first, second] = await act(Promise.all([schedule, standby]));
   assert.equal(second.success, true, second.error);
@@ -639,7 +681,7 @@ test('queued commands are dropped the moment a standby arrives', async () => {
     gladys.fake.setValue(device, { external_id: F('target-temperature') }, v),
   );
   await settle();
-  assert.equal(app.commands.length, 2);
+  assert.equal(app.commands.length, 3, 'gathered for 50 ms');
   const standby = gladys.fake.setValue(device, { external_id: F('mode') }, 'standby');
   await settle();
   assert.equal(app.commands.length, 0);
@@ -682,9 +724,12 @@ test('a newer "Schedule" that left stops the resending, and the status says noth
   const world = fakeHub();
   const { gladys, start, cmd, wait } = await setup({ world, config: ON });
   await start();
+  // Sent, never answered: pending.
+  world.fail = (name) => (name === 'FROST_ON' ? { kind: 'timeout', sent: true } : undefined);
   world.apply = false;
   await cmd(F('mode'), 'standby');
   assert.match(gladys.fake.connectionStatus.message.en, /sent again/);
+  world.fail = undefined;
   world.apply = true;
   await cmd(F('mode'), 'schedule');
   assert.doesNotMatch(gladys.fake.connectionStatus.message.en, /sent again/);

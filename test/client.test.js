@@ -219,3 +219,29 @@ test('a connection stuck opening (TLS) for 1 s is cut for a protective command',
   assert.ok(took < 3000, `left after ${Math.round(took)} ms`);
   assert.equal(hub.commands[0].command, "{'FROST_ON':['Hall']}");
 });
+
+test('an error text of the hub quoting the token: the token never kept (R8)', async (t) => {
+  const { client } = await pair(t, { onCommand: () => ({ error: `oops ${TOKEN} here` }) });
+  await assert.rejects(client.request('GET_LIVE_DATA', 0, { deadline: soon() }), (err) => {
+    assert.equal(err.kind, 'hub');
+    assert.ok(!err.text.includes(TOKEN), err.text);
+    return true;
+  });
+});
+
+test('the lane is awaited until sendBy at most: past it, "late" and nothing sent', async (t) => {
+  const { hub, client } = await pair(t, {
+    onCommand: (c) => (c.startsWith("{'GET_LIVE_DATA'") ? undefined : { result: 'ok' }),
+  });
+  const read = client.request('GET_LIVE_DATA', 0, { deadline: soon(2000) });
+  read.catch(() => {});
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const started = performance.now();
+  await assert.rejects(
+    client.request('SET_TEMP', [20, [1]], { deadline: soon(1500), sendBy: soon(300) }),
+    (err) => err.kind === 'late' && err.sent === false,
+  );
+  assert.ok(performance.now() - started < 1000);
+  await assert.rejects(read);
+  assert.ok(hub.commands.every((c) => !c.command.startsWith("{'SET_TEMP'")));
+});

@@ -60,7 +60,13 @@ export function fakeHub({ zones = [ZONE()], hubId = HUB, unit = 'C' } = {}) {
 }
 
 function effect(world, name, argument) {
-  const byName = (n) => world.zones.find((z) => z.ZONE_NAME === n);
+  // A device is its zone name or its device number (PDF p. 8); one or an array.
+  const find = (d) =>
+    world.zones.find((z) => (typeof d === 'number' ? z.DEVICE_ID === d : z.ZONE_NAME === d));
+  const all = (devices) => {
+    const list = (Array.isArray(devices) ? devices : [devices]).map(find);
+    return list.every(Boolean) ? list : undefined;
+  };
   switch (name) {
     case 'GET_LIVE_DATA':
       return {
@@ -72,16 +78,16 @@ function effect(world, name, argument) {
     case 'GET_SYSTEM':
       return { CORF: world.unit, DEVICE_ID: 'neoHub', HUB_VERSION: 2153 };
     case 'SET_TEMP': {
-      const zone = byName(argument[1][0]);
-      if (!zone) return { error: 'Could not find device' };
-      if (world.apply) zone.SET_TEMP = argument[0].toFixed(1);
+      const zones = all(argument[1]);
+      if (!zones) return { error: 'Could not find device' };
+      if (world.apply) for (const zone of zones) zone.SET_TEMP = argument[0].toFixed(1);
       return { result: 'temperature was set' };
     }
     case 'FROST_ON':
     case 'FROST_OFF': {
-      const zone = byName(argument[0]);
-      if (!zone) return { error: 'Could not find device' };
-      if (world.apply) zone.STANDBY = name === 'FROST_ON';
+      const zones = all(argument);
+      if (!zones) return { error: 'Could not find device' };
+      if (world.apply) for (const zone of zones) zone.STANDBY = name === 'FROST_ON';
       return { result: name === 'FROST_ON' ? 'frost on' : 'frost off' };
     }
     case 'AWAY_ON':
@@ -114,7 +120,7 @@ class FakeClient {
     return this.options.monotonic;
   }
 
-  acquire(priority) {
+  acquire(priority, until) {
     const holder = { priority, startedAt: undefined, onCut: undefined, cut: false };
     if (!this.holder) {
       this.holder = holder;
@@ -131,12 +137,28 @@ class FakeClient {
         }
       }, wait);
     }
-    return new Promise((resolve) => {
-      (priority ? this.high : this.low).push(() => {
+    return new Promise((resolve, reject) => {
+      const list = priority ? this.high : this.low;
+      let timer;
+      const turn = () => {
+        this.options.timers.clearTimeout(timer);
         this.holder = holder;
         holder.startedAt = this.monotonic();
         resolve(holder);
-      });
+      };
+      list.push(turn);
+      if (Number.isFinite(until)) {
+        timer = this.options.timers.setTimeout(
+          () => {
+            const i = list.indexOf(turn);
+            if (i >= 0) {
+              list.splice(i, 1);
+              reject(new NeoHubError('late', 'its turn did not come in time'));
+            }
+          },
+          Math.max(0, until - this.monotonic()),
+        );
+      }
     });
   }
 
@@ -147,28 +169,36 @@ class FakeClient {
     if (next) next();
   }
 
-  async request(name, argument, { deadline, priority = false, beforeSend, onSent } = {}) {
-    encodeCommand(name, argument);
-    const holder = await this.acquire(priority);
+  async request(
+    name,
+    argument,
+    { deadline, sendBy = deadline, priority = false, beforeSend, onSent } = {},
+  ) {
+    if (typeof argument !== 'function') encodeCommand(name, argument);
+    const holder = await this.acquire(priority, sendBy);
     try {
-      return await this.exchange(holder, name, argument, { deadline, beforeSend, onSent });
+      return await this.exchange(holder, name, argument, { deadline, sendBy, beforeSend, onSent });
     } finally {
       this.release(holder);
     }
   }
 
-  async exchange(holder, name, argument, { deadline, beforeSend, onSent }) {
+  async exchange(holder, name, given, { deadline, sendBy, beforeSend, onSent }) {
     const { world } = this;
     if (this.stopped) throw new NeoHubError('stopped', 'stopped');
     if (holder.cut) throw new NeoHubError('cut', 'cut');
     if (!this.options.pin) throw new NeoHubError('nopin', 'certificate not pinned');
-    if (this.monotonic() >= deadline) throw new NeoHubError('late', 'too late to send');
+    if (this.monotonic() >= sendBy) throw new NeoHubError('late', 'too late to send');
+    let argument = typeof given === 'function' ? undefined : given;
     const failure = world.fail?.(name, argument);
     if (failure && !failure.sent) {
       await world.clock.sleep(5);
       throw new NeoHubError(failure.kind, 'injected', failure);
     }
+    if (this.monotonic() >= sendBy) throw new NeoHubError('late', 'too late to send');
     beforeSend?.();
+    if (typeof given === 'function') argument = given();
+    encodeCommand(name, argument);
     world.sent.push({
       name,
       argument: structuredClone(argument),

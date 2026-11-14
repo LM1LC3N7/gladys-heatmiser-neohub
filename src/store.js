@@ -101,10 +101,14 @@ export function normalizeMemory(raw, now = Date.now()) {
       : null;
   const pins = {};
   if (r.pins && typeof r.pins === 'object' && !Array.isArray(r.pins)) {
-    for (const [k, v] of Object.entries(r.pins).slice(0, MAX_PINS)) {
-      if (KEY.test(k) && typeof v === 'string' && FINGERPRINT.test(v)) {
-        pins[k] = v;
-      }
+    const valid = Object.entries(r.pins).filter(
+      ([k, v]) => KEY.test(k) && typeof v === 'string' && FINGERPRINT.test(v),
+    );
+    // The pin of the address in use is always kept; then the newest others (the oldest go first).
+    const inUse = valid.filter(([k]) => k === key);
+    const others = valid.filter(([k]) => k !== key).slice(-(MAX_PINS - inUse.length));
+    for (const [k, v] of [...others, ...inUse]) {
+      pins[k] = v;
     }
   }
   const f = r.refused;

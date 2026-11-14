@@ -30,7 +30,7 @@ test('real clock: reads at 0, the interval and twice the interval; a standby at 
         return { HUB_AWAY: false, HUB_HOLIDAY: false, TIMESTAMP_SYSTEM: 1, devices: [zone] };
       }
       if (command === "{'GET_SYSTEM':0}") return { CORF: 'C' };
-      if (command === "{'FROST_ON':['Living room']}") {
+      if (command === "{'FROST_ON':[1]}") {
         zone.STANDBY = true;
         return { result: 'frost on' };
       }

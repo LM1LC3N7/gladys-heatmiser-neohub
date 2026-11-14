@@ -133,6 +133,12 @@ const number = (value) =>
 const clamp = (value, { min, max }, fallback) =>
   Number.isFinite(value) ? Math.round(Math.max(min, Math.min(max, value))) : fallback;
 
+/** The ceiling of the setpoints: bounded, rounded DOWN to the step of 0.5 °C (22.7 -> 22.5). */
+const ceilingOf = (value) =>
+  Number.isFinite(value)
+    ? Math.floor(Math.max(SETPOINT.ceilingMin, Math.min(SETPOINT.max, value)) * 2) / 2
+    : DEFAULTS.max_setpoint;
+
 /** Only true (or "true") turns an option on: anything else keeps it off. */
 const on = (value) => value === true || value === 'true';
 
@@ -157,11 +163,7 @@ export function normalizeConfig(raw = {}) {
     fingerprint: pin.fingerprint,
     error,
     allowHeating: on(c.allow_heating),
-    ceiling: clamp(
-      number(c.max_setpoint),
-      { min: SETPOINT.ceilingMin, max: SETPOINT.max },
-      DEFAULTS.max_setpoint,
-    ),
+    ceiling: ceilingOf(number(c.max_setpoint)),
     pollInterval: clamp(number(c.poll_interval), POLL_INTERVAL, DEFAULTS.poll_interval),
     language: LANGUAGES.includes(language) ? language : DEFAULTS.language,
   };

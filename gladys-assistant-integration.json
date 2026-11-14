@@ -22,8 +22,8 @@
         "fr": "Votre neoHub Heatmiser"
       },
       "description": {
-        "en": "Brings the thermostat zones of your Heatmiser neoHub into Gladys, on your local network, through the official local API of the hub (secure WebSocket, port 4243): the temperature, the setpoint and the mode (schedule or standby) of each zone, and the away mode of the hub. Create an API token in the Heatmiser Neo app (Settings > API Access > Tokens), type it below with the address of the hub, save, then click \"Test the connection\" once to confirm the certificate of the hub. Standby and away need no option; setpoints and the return to the schedule stay off until allowed below. Never tested with a real device yet. Unofficial, not affiliated with Heatmiser.",
-        "fr": "Ajoute les zones thermostat de votre neoHub Heatmiser à Gladys, sur votre réseau local, par l'API locale officielle du hub (WebSocket sécurisé, port 4243) : la température, la consigne et le mode (programme ou veille) de chaque zone, et le mode absence du hub. Créez un jeton d'API dans l'app Heatmiser Neo (Paramètres > API Access > Tokens), saisissez-le ci-dessous avec l'adresse du hub, enregistrez, puis cliquez une fois sur « Tester la connexion » pour confirmer le certificat du hub. La veille et l'absence ne demandent aucune option ; les consignes et le retour au programme restent désactivés tant qu'ils ne sont pas autorisés ci-dessous. Jamais testé avec un vrai appareil pour l'instant. Non officiel, sans lien avec Heatmiser."
+        "en": "Brings the thermostat zones of your Heatmiser neoHub into Gladys, on your local network, through the official local API of the hub (secure WebSocket, port 4243): the temperature, the setpoint and the mode (schedule or standby) of each zone, and the away mode of the hub. Create an API token in the Heatmiser Neo app (Settings > API Access > Tokens), type it below with the address of the hub, save, then click \"Test the connection\" once, from your home network: it learns the fingerprint of the certificate of the hub (learnt, not verified: the guide tells how to compare it). Standby and away need no option; setpoints and the return to the schedule stay off until allowed below. Never tested with a real device yet. Unofficial, not affiliated with Heatmiser.",
+        "fr": "Ajoute les zones thermostat de votre neoHub Heatmiser à Gladys, sur votre réseau local, par l'API locale officielle du hub (WebSocket sécurisé, port 4243) : la température, la consigne et le mode (programme ou veille) de chaque zone, et le mode absence du hub. Créez un jeton d'API dans l'app Heatmiser Neo (Paramètres > API Access > Tokens), saisissez-le ci-dessous avec l'adresse du hub, enregistrez, puis cliquez une fois sur « Tester la connexion », depuis votre réseau domestique : l'empreinte du certificat du hub est apprise (apprise, non vérifiée : le guide explique comment la comparer). La veille et l'absence ne demandent aucune option ; les consignes et le retour au programme restent désactivés tant qu'ils ne sont pas autorisés ci-dessous. Jamais testé avec un vrai appareil pour l'instant. Non officiel, sans lien avec Heatmiser."
       },
       "links": [
         {
@@ -67,8 +67,8 @@
         "fr": "Jeton d'API du hub"
       },
       "description": {
-        "en": "Created in the Heatmiser Neo app: Settings > API Access > Tokens. Kept by Gladys in its database, never shown again, and sent only to the hub at the address above, over its confirmed certificate.",
-        "fr": "Créé dans l'app Heatmiser Neo : Paramètres > API Access > Tokens. Gardé par Gladys dans sa base, jamais réaffiché, et envoyé seulement au hub à l'adresse ci-dessus, sur son certificat confirmé."
+        "en": "Created in the Heatmiser Neo app: Settings > API Access > Tokens. Kept by Gladys in its database, never shown again, and sent only to the hub at the address above, over its learnt certificate.",
+        "fr": "Créé dans l'app Heatmiser Neo : Paramètres > API Access > Tokens. Gardé par Gladys dans sa base, jamais réaffiché, et envoyé seulement au hub à l'adresse ci-dessus, sur son certificat appris."
       },
       "required": true
     },
@@ -80,8 +80,8 @@
         "fr": "Empreinte du certificat (facultatif)"
       },
       "description": {
-        "en": "The SHA-256 fingerprint of the certificate of the hub (the hub makes its own certificate). Empty: confirmed on your first click of \"Test the connection\", then checked on every connection; the token never goes to another certificate. If the hub is replaced or reset, type here the fingerprint the status shows.",
-        "fr": "L'empreinte SHA-256 du certificat du hub (le hub fabrique son propre certificat). Vide : confirmée à votre premier clic sur « Tester la connexion », puis vérifiée à chaque connexion ; le jeton ne part jamais vers un autre certificat. Si le hub est remplacé ou réinitialisé, saisissez ici l'empreinte que montre le statut."
+        "en": "The SHA-256 fingerprint of the certificate of the hub (the hub makes its own certificate). Empty: learnt on your first click of \"Test the connection\" (learnt, not verified: do it from your home network and compare it as the guide shows), then checked on every connection; the token never goes to another certificate. If the hub is replaced or reset, type here the fingerprint the status shows.",
+        "fr": "L'empreinte SHA-256 du certificat du hub (le hub fabrique son propre certificat). Vide : apprise à votre premier clic sur « Tester la connexion » (apprise, non vérifiée : faites-le depuis votre réseau domestique et comparez-la comme l'explique le guide), puis vérifiée à chaque connexion ; le jeton ne part jamais vers un autre certificat. Si le hub est remplacé ou réinitialisé, saisissez ici l'empreinte que montre le statut."
       },
       "required": false,
       "default": ""
@@ -94,8 +94,8 @@
         "fr": "Commandes de chauffage (désactivées par défaut)"
       },
       "description": {
-        "en": "Standby of a zone (frost protection) and the away mode of the hub need no option: they only lower the heating. Without the option below, Gladys does nothing else. Each command is decided on a fresh read of the hub. No command goes through a switch: a \"turn everything off\" never reaches the heating.",
-        "fr": "La mise en veille d'une zone (hors gel) et le mode absence du hub ne demandent aucune option : ils ne font que baisser le chauffage. Sans l'option ci-dessous, Gladys ne fait rien d'autre. Chaque commande est décidée sur une lecture fraîche du hub. Aucune commande ne passe par un interrupteur : un « tout éteindre » n'atteint jamais le chauffage."
+        "en": "Standby of a zone (frost protection) and the away mode of the hub need no option: standby only lowers the heating of its zone; away puts every thermostat in standby and turns the time clocks and neoPlugs off. Without the option below, Gladys sends nothing else. Setpoints, Schedule and Home are decided on a fresh read of the hub. No command goes through a switch: a \"turn everything off\" never reaches the heating.",
+        "fr": "La mise en veille d'une zone (hors gel) et le mode absence du hub ne demandent aucune option : la veille ne fait que baisser le chauffage de sa zone ; l'absence met tous les thermostats en veille et coupe les horloges et les neoPlug. Sans l'option ci-dessous, Gladys n'envoie rien d'autre. Consignes, Programme et Présent sont décidés sur une lecture fraîche du hub. Aucune commande ne passe par un interrupteur : un « tout éteindre » n'atteint jamais le chauffage."
       }
     },
     {
@@ -183,8 +183,8 @@
         "fr": "Tester la connexion"
       },
       "description": {
-        "en": "The first click confirms the certificate of the hub. Then reads the hub once if the refresh interval allows it (never sooner than the interval, nor during a pause after failed reads) and shows the status. A refused token is tried again only by this button.",
-        "fr": "Le premier clic confirme le certificat du hub. Puis lit le hub une fois si l'intervalle de rafraîchissement le permet (jamais plus tôt que l'intervalle, ni pendant une pause après des lectures en échec) et affiche l'état. Un jeton refusé n'est réessayé que par ce bouton."
+        "en": "The first click learns the fingerprint of the certificate of the hub (not verified: from your home network). Then reads the hub once if the refresh interval allows it (never sooner than the interval, nor during a pause after failed reads) and shows the status. A refused token is tried again only by this button.",
+        "fr": "Le premier clic apprend l'empreinte du certificat du hub (non vérifiée : depuis votre réseau domestique). Puis lit le hub une fois si l'intervalle de rafraîchissement le permet (jamais plus tôt que l'intervalle, ni pendant une pause après des lectures en échec) et affiche l'état. Un jeton refusé n'est réessayé que par ce bouton."
       },
       "timeout_seconds": 30
     }
