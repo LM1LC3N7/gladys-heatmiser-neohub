@@ -40,9 +40,11 @@ real hub.
   number"), never by name; a sensitive command also checks the name against
   the previous read. To confirm on a real hub: a list of numbers accepted by
   FROST_ON / SET_TEMP.
-- **Stops answered by the hub are not resent** (a change made since in the app
-  wins); only unanswered ones are resent (3 times at most, never with a
-  refused token). "Schedule" / "Home" lift the stop: written to /data before
+- **Stops decided by the first read sent after the answer of the hub** (r2
+  B-2): shown, done (a change made later in the app wins); not shown or not
+  answered, resent with the next reads (3 times at most, never with a refused
+  token), told in the status and the badge. A hub that refuses device numbers
+  or ignores them gets zones by name (per zone), remembered for the session. "Schedule" / "Home" lift the stop: written to /data before
   their first byte (refused unsent otherwise), and re-checked right before any
   stop leaves.
 - **Acks** by ~3.4 s (send by 2.8 s, the turn in the queue and in the lane

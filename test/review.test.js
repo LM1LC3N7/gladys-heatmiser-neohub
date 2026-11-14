@@ -165,7 +165,7 @@ test('I-4 the hub switched to °F: seen by the fresh read, the setpoint refused,
   world.zones[0].ACTUAL_TEMP = '59.0';
   const ack = await cmd(F('target-temperature'), 22);
   assert.equal(ack.success, false);
-  assert.match(ack.error, /unité du hub/);
+  assert.match(ack.error, /°F/);
   assert.equal(world.count('SET_TEMP'), 0);
   await wait(30 * SECOND);
   assert.notEqual(gladys.fake.lastState(F('temperature')), 59);
@@ -227,7 +227,7 @@ test('m-8 a standby the hub does not answer: acked by 3.4 s, then sent again by 
   );
   assert.ok(clock.now - asked <= 3450, `ack after ${clock.now - asked} ms`);
   assert.equal(ack.success, false);
-  assert.match(ack.error, /En cours d’envoi/);
+  assert.match(ack.error, /en attente de la réponse du hub/);
 });
 
 // --- I-7: scenes -----------------------------------------------------------------------
@@ -385,13 +385,55 @@ test('I-8 R39 the pause after a failure is never shorter than the interval', asy
 
 // --- m-3, m-4, m-5, m-6 ------------------------------------------------------------------
 
-test('m-3 a standby the hub answered is not sent again, even if its data never shows it', async () => {
+test('B-2 (A) a hub that refuses device numbers: the standby goes again by name, at once', async () => {
+  const world = fakeHub({ zones: two() });
+  world.numbers = 'refuse';
+  const devices = world.zones.map((z) => created(z));
+  const { app, start, cmd, wait } = await setup({ world, devices, config: ON });
+  await start();
+  const ack = await cmd(F('mode'), 'standby');
+  assert.equal(ack.success, true, ack.error);
+  assert.deepEqual(
+    world.sent.filter((s) => s.name === 'FROST_ON').map((s) => s.argument),
+    [[1], ['Living room']],
+  );
+  assert.equal(world.zone(1).STANDBY, true);
+  assert.equal(app.formOf(HUB), 'name', 'remembered for this hub');
+  // The next commands go by name at once.
+  await cmd(F('mode', 2), 'standby');
+  assert.deepEqual(world.sent.filter((s) => s.name === 'FROST_ON').at(-1).argument, ['Hall']);
+  await wait(SECOND);
+  assert.equal((await cmd(F('target-temperature'), 21.5)).success, false, 'standby guard');
+});
+
+test('B-2 (B) a hub that answers OK to numbers without doing it: contradicted, told, sent again by name', async () => {
+  const world = fakeHub({ zones: two() });
+  world.numbers = 'ignore';
+  const devices = world.zones.map((z) => created(z));
+  const { gladys, start, cmd, wait } = await setup({ world, devices });
+  await start();
+  const ack = await cmd(F('mode'), 'standby');
+  assert.match(ack.error, /lecture suivante ne le montre pas/);
+  assert.equal(world.zone(1).STANDBY, false);
+  assert.match(gladys.fake.connectionStatus.message.en, /not applied \(sent again\): Living room/);
+  const badge = gladys.fake.transports.filter((t) => t.device_external_id.endsWith('-1')).at(-1);
+  assert.equal(badge.degraded, true);
+  await wait(MINUTE);
+  assert.deepEqual(world.sent.filter((s) => s.name === 'FROST_ON').at(-1).argument, [
+    'Living room',
+  ]);
+  assert.equal(world.zone(1).STANDBY, true);
+  assert.doesNotMatch(gladys.fake.connectionStatus.message.en, /not applied/);
+});
+
+test('m-3 a standby shown by the read after its answer is done: a change in the app wins', async () => {
   const world = fakeHub();
   const { start, cmd, wait } = await setup({ world });
   await start();
-  world.apply = false;
   const ack = await cmd(F('mode'), 'standby');
-  assert.match(ack.error, /accepté par le hub/);
+  assert.equal(ack.success, true, ack.error);
+  // Put back on its program in the app: never fought.
+  world.zones[0].STANDBY = false;
   await wait(10 * MINUTE);
   assert.equal(world.count('FROST_ON'), 1);
 });
@@ -443,4 +485,164 @@ test('m-6 follow-up reads are grouped: 8 setpoints, a bounded number of reads', 
   const before = world.count('GET_LIVE_DATA');
   await wait(25 * SECOND);
   assert.equal(world.count('GET_LIVE_DATA') - before, 2, 'one follow-up at 5 s, one at 20 s');
+});
+
+// --- r2: I-9, m-9 to m-13 ------------------------------------------------------------------
+
+test('I-9 N6 different setpoints of a scene are never grouped', async () => {
+  const world = fakeHub({ zones: two() });
+  const devices = world.zones.map((z) => created(z));
+  const { gladys, start, act } = await setup({ world, config: ON, devices });
+  await start();
+  await act(
+    Promise.all([
+      gladys.fake.setValue(devices[0], { external_id: F('target-temperature', 1) }, 18),
+      gladys.fake.setValue(devices[1], { external_id: F('target-temperature', 2) }, 23),
+    ]),
+  );
+  const sets = world.sent.filter((s) => s.name === 'SET_TEMP').map((s) => s.argument);
+  assert.ok(
+    sets.every((a) => a[1].length === 1),
+    JSON.stringify(sets),
+  );
+  assert.notEqual(world.zone(2).SET_TEMP, '18.0');
+});
+
+test('m-11 different setpoints applied are acked as applied (read back even when others wait)', async () => {
+  const world = fakeHub({ zones: two() });
+  const devices = world.zones.map((z) => created(z));
+  const { gladys, start, act } = await setup({ world, config: ON, devices });
+  await start();
+  const acks = await act(
+    Promise.all([
+      gladys.fake.setValue(devices[0], { external_id: F('target-temperature', 1) }, 18),
+      gladys.fake.setValue(devices[1], { external_id: F('target-temperature', 2) }, 23),
+    ]),
+  );
+  assert.deepEqual(
+    acks.map((a) => a.success),
+    [true, true],
+    JSON.stringify(acks),
+  );
+});
+
+test('I-9 N19 a "Schedule" waiting for its slow /data write is refused when a standby arrives meanwhile', async () => {
+  const store = memoryStore();
+  const world = fakeHub();
+  const { app, gladys, start, cmd, act, advance } = await setup({ store, world, config: ON });
+  await start();
+  // A standby the hub does not answer: its guard waits (to be lifted by Schedule).
+  world.fail = (name) => (name === 'FROST_ON' ? { kind: 'timeout', sent: true } : undefined);
+  await cmd(F('mode'), 'standby');
+  world.fail = undefined;
+  const save = store.save.bind(store);
+  store.save = (d) => world.clock.sleep(1500).then(() => save(d));
+  const device = gladys.devices[0];
+  const schedule = gladys.fake.setValue(device, { external_id: F('mode') }, 'schedule');
+  await settle();
+  await advance(400);
+  await settle();
+  const standby = gladys.fake.setValue(device, { external_id: F('mode') }, 'standby');
+  const [first] = await act(Promise.all([schedule, standby]));
+  assert.equal(first.success, false);
+  assert.equal(world.count('FROST_OFF'), 0);
+  assert.equal(world.zone(1).STANDBY, true);
+  app.stop();
+});
+
+test('I-9 N12 a "Schedule" that does not leave puts the lift back: the stop is sent again', async () => {
+  const world = fakeHub();
+  const { start, cmd, wait } = await setup({ world, config: ON });
+  await start();
+  world.fail = (name) => (name === 'FROST_ON' ? { kind: 'timeout', sent: true } : undefined);
+  await cmd(F('mode'), 'standby');
+  world.fail = (name) => (name === 'FROST_OFF' ? { kind: 'network', sent: false } : undefined);
+  const ack = await cmd(F('mode'), 'schedule');
+  assert.match(ack.error, /^Pas envoyé/);
+  world.fail = undefined;
+  const before = world.count('FROST_ON');
+  await wait(MINUTE);
+  assert.equal(world.count('FROST_ON'), before + 1);
+  assert.equal(world.zone(1).STANDBY, true);
+});
+
+test('I-9 N1 a standby that cannot leave by its ack leaves as soon as the hub is free', async () => {
+  const world = fakeHub({ zones: two() });
+  const devices = [...world.zones.map((z) => created(z)), createdHub()];
+  const { gladys, start, act, wait } = await setup({ world, devices });
+  await start();
+  world.delay = (name) => (name === 'AWAY_ON' ? 9000 : 20);
+  const away = gladys.fake.setValue(devices[2], { external_id: HUB_AWAY }, 'away');
+  await settle();
+  const standby = gladys.fake.setValue(devices[1], { external_id: F('mode', 2) }, 'standby');
+  await act(Promise.all([away, standby]));
+  await wait(8 * SECOND);
+  // Before the next read (60 s): it left right after the away.
+  assert.equal(world.count('FROST_ON'), 1);
+});
+
+test('m-9 a setpoint right after a restart: zone name from the Scan, unit read in the command', async () => {
+  const store = memoryStore();
+  const world = fakeHub();
+  const { app, start, clock } = await setup({ store, world, config: ON });
+  await start();
+  app.stop();
+  // Restarted 10 s later: no periodic read before the interval.
+  const next = await setup({ store, world, config: ON, now: clock.now + 10 * SECOND });
+  await next.start();
+  const ack = await next.cmd(F('target-temperature'), 22);
+  assert.equal(ack.success, true, ack.error);
+  next.app.stop();
+});
+
+test('m-12 a /data slow once: the pin comes back, the status and a waiting standby follow at once', async () => {
+  const config = { host: '192.168.1.40', api_token: CONFIG.api_token };
+  const key = normalizeConfig(config).key;
+  const store = memoryStore({ pins: { [key]: PIN }, guards: [] });
+  const load = store.load.bind(store);
+  let slow = true;
+  const world = fakeHub();
+  store.load = () => (slow ? world.clock.sleep(2500).then(() => load()) : load());
+  const { app, gladys, act, wait } = await setup({ store, world, config });
+  await act(app.connected(config));
+  assert.match(gladys.fake.connectionStatus.message.en, /not known yet/);
+  slow = false;
+  await act(gladys.fake.setValue(gladys.devices[0], { external_id: F('mode') }, 'standby'));
+  await wait(11 * SECOND);
+  assert.equal(world.sent[0]?.name, 'FROST_ON', 'the waiting standby first, then the read');
+  assert.equal(world.sent[0].argument[0], 1);
+  assert.match(gladys.fake.connectionStatus.message.en, /Connected/);
+  app.stop();
+});
+
+test('m-13 R3 a setpoint is refused while the hub is away (its zones not flagged)', async () => {
+  const world = fakeHub();
+  const { start, cmd } = await setup({ world, config: ON });
+  await start();
+  world.hubAway = true;
+  const ack = await cmd(F('target-temperature'), 20);
+  assert.match(ack.error, /veille, absente ou en vacances/);
+  assert.equal(world.count('SET_TEMP'), 0);
+});
+
+test('m-13 R17 a pause that starts between the fresh read and the send refuses the command', async () => {
+  const world = fakeHub();
+  const { app, start, cmd } = await setup({ world, config: ON });
+  await start();
+  const absorb = app.absorb.bind(app);
+  app.absorb = (...args) => {
+    absorb(...args);
+    app.setPause(app.monotonic(), MINUTE);
+  };
+  const ack = await cmd(F('target-temperature'), 20);
+  assert.match(ack.error, /pause en cours/);
+  assert.equal(world.count('SET_TEMP'), 0);
+});
+
+test('m-13 R39 the status gives the true wait: never shorter than the interval', async () => {
+  const world = fakeHub();
+  world.fail = () => ({ kind: 'network', sent: false });
+  const { gladys, start } = await setup({ world, config: { ...CONFIG, poll_interval: 600 } });
+  await start();
+  assert.match(gladys.fake.connectionStatus.message.en, /new try in 10 min/);
 });

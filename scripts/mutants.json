@@ -228,12 +228,6 @@
     "to": "return guard.liftPending === true;"
   },
   {
-    "name": "token refused after the send called not sent",
-    "file": "src/app.js",
-    "from": "return { sent: true, included: keys, error: ERRORS.tokenRefusedSent };",
-    "to": "return { sent: false, included: keys, error: ERRORS.tokenRefused };"
-  },
-  {
     "name": "/data written before it is read",
     "file": "src/app.js",
     "from": "    this.memoryUnreadable = true;\n    /** target key",
@@ -246,22 +240,10 @@
     "to": "      return Promise.resolve({ error: ERRORS.configNotLoaded });\n    }\n    if (!this.client) {"
   },
   {
-    "name": "B-1 zone addressed by its name",
-    "file": "src/app.js",
-    "from": "          const ids = sending.map((j) => j.target.zone);",
-    "to": "          const ids = sending.map((j) => fresh.get(j).zone?.rawName ?? j.target.zone);"
-  },
-  {
     "name": "B-1 renamed zone commanded",
     "file": "src/app.js",
     "from": "    if (zone.rawName !== expected) {",
     "to": "    if (false) {"
-  },
-  {
-    "name": "I-1 lifted guard still sent",
-    "file": "src/app.js",
-    "from": "[...batch.guards].filter(([k, g]) => this.guards.get(k) === g && !this.lifted(k, g)),",
-    "to": "[...batch.guards].filter(([k, g]) => this.guards.get(k) === g),"
   },
   {
     "name": "I-1 lift not written before Schedule",
@@ -306,12 +288,6 @@
     "to": "    this.lastReason = undefined;"
   },
   {
-    "name": "I-8 R10 guard settled by an older read",
-    "file": "src/app.js",
-    "from": "guard.shown || !key.startsWith(`${hubId}-`) || at < (guard.sentAt ?? -Infinity)",
-    "to": "guard.shown || !key.startsWith(`${hubId}-`)"
-  },
-  {
     "name": "I-8 R11 guard of another hub resent",
     "file": "src/app.js",
     "from": "      if (!hubs.has(hub)) continue;\n",
@@ -328,12 +304,6 @@
     "file": "src/app.js",
     "from": "    if (this.hubId !== undefined && this.hubId !== target.hub) {\n      guard.pending = false;",
     "to": "    if (false) {\n      guard.pending = false;"
-  },
-  {
-    "name": "m-3 an answered stop sent again",
-    "file": "src/app.js",
-    "from": "      // Answered without error: the hub took it; never sent again by the reads.\n      for (const g of included.values()) g.pending = false;",
-    "to": "      // Answered without error: the hub took it; never sent again by the reads."
   },
   {
     "name": "m-4 pin in use dropped",
@@ -358,5 +328,89 @@
     "file": "src/app.js",
     "from": "    // Nothing is written to /data until it has been read (it would overwrite the pins).\n    this.memoryUnreadable = true;",
     "to": "    this.memoryUnreadable = false;"
+  },
+  {
+    "name": "token refused after the send called not sent",
+    "file": "src/app.js",
+    "from": "return { sent: true, included: done, error: ERRORS.tokenRefusedSent };",
+    "to": "return { sent: false, included: done, error: ERRORS.tokenRefused };"
+  },
+  {
+    "name": "B-1 zone addressed by its name",
+    "file": "src/app.js",
+    "from": "form === 'name' ? fresh.get(j).zone.rawName : j.target.zone,",
+    "to": "fresh.get(j).zone?.rawName ?? j.target.zone,"
+  },
+  {
+    "name": "I-1 lifted guard still sent",
+    "file": "src/app.js",
+    "from": ".filter(([k, g]) => g && this.guards.get(k) === g && !this.lifted(k, g)),",
+    "to": ".filter(([k, g]) => g && this.guards.get(k) === g),"
+  },
+  {
+    "name": "I-8 R10 guard settled by an older read",
+    "file": "src/app.js",
+    "from": "if (shown && (decisive || at >= (guard.sentAt ?? -Infinity))) {",
+    "to": "if (shown) {"
+  },
+  {
+    "name": "B-2 an answered stop taken as done without a read",
+    "file": "src/app.js",
+    "from": "      } else if (decisive && !shown && !guard.decided) {",
+    "to": "      } else if (false) {"
+  },
+  {
+    "name": "B-2 no fallback by name after a refusal of numbers",
+    "file": "src/app.js",
+    "from": "      if (!result.numbersRefused) {",
+    "to": "      if (true) {"
+  },
+  {
+    "name": "B-2 contradiction does not switch to names",
+    "file": "src/app.js",
+    "from": "          this.forms.set(hubId, 'name');\n",
+    "to": ""
+  },
+  {
+    "name": "N6 different setpoints grouped",
+    "file": "src/app.js",
+    "from": "            job.wanted.tenths === head.wanted.tenths &&\n",
+    "to": ""
+  },
+  {
+    "name": "N12 lift kept after a Schedule that never left",
+    "file": "src/app.js",
+    "from": "      if (!left) unlift();\n",
+    "to": ""
+  },
+  {
+    "name": "N1 stop dropped from the lane at 2.8 s",
+    "file": "src/app.js",
+    "from": "            sendBy: Infinity,",
+    "to": "            sendBy: this.monotonic() + 2800,"
+  },
+  {
+    "name": "m-9 no Scan name after a restart",
+    "file": "src/app.js",
+    "from": "          zoneNameParam(this.createdDevice(j.target.key)),",
+    "to": "          undefined,"
+  },
+  {
+    "name": "m-11 commands waiting never confirmed by a later read",
+    "file": "src/app.js",
+    "from": "    // Commands waiting for a read back get their answer from this read.\n    this.settleChecked();",
+    "to": "    // Commands waiting for a read back get their answer from this read."
+  },
+  {
+    "name": "m-12 stop not sent when the pin comes back",
+    "file": "src/app.js",
+    "from": "      await this.resendGuards(generation);\n      if (generation === this.generation && !this.refused) {",
+    "to": "      if (generation === this.generation && !this.refused) {"
+  },
+  {
+    "name": "m-9 unit not read in the command",
+    "file": "src/app.js",
+    "from": "      this.unit === undefined &&\n",
+    "to": "      false &&\n"
   }
 ]

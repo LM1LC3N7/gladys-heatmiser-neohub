@@ -41,6 +41,7 @@ export function fakeHub({ zones = [ZONE()], hubId = HUB, unit = 'C' } = {}) {
     /** (name) -> the latency of that command (ms), or undefined for `latency`. */
     delay: undefined,
     apply: true,
+    numbers: 'ok',
     /** (name, argument) -> { kind, sent, text } to fail that command, or undefined. */
     fail: undefined,
     /** (name) -> true: that command is never answered (until its deadline or a cut). */
@@ -63,8 +64,12 @@ function effect(world, name, argument) {
   // A device is its zone name or its device number (PDF p. 8); one or an array.
   const find = (d) =>
     world.zones.find((z) => (typeof d === 'number' ? z.DEVICE_ID === d : z.ZONE_NAME === d));
+  // world.numbers: 'ok', 'refuse' (an error for a device number), 'ignore' (OK, nothing done).
   const all = (devices) => {
-    const list = (Array.isArray(devices) ? devices : [devices]).map(find);
+    const given = Array.isArray(devices) ? devices : [devices];
+    if (world.numbers === 'refuse' && given.some((d) => typeof d === 'number')) return undefined;
+    const list = given.map(find);
+    if (world.numbers === 'ignore' && given.some((d) => typeof d === 'number')) return [];
     return list.every(Boolean) ? list : undefined;
   };
   switch (name) {

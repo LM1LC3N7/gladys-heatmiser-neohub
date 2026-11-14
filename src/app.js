@@ -15,26 +15,30 @@
 // the reads, the pauses, the budgets and the guards. The clock is read once
 // per decision (`dueAt(mono)` computes on the caller's instant).
 //
-// Commands:
+// Commands (zones addressed by their device number, by name once a hub
+// refused or ignored numbers):
 //   - protective, never blocked by an option, a pause, a refused token, the
 //     queue or a read in progress: "Standby" on a zone (FROST_ON) and "Away"
 //     on the hub (AWAY_ON). Sent at once, out of the queue, before any
-//     waiting command (a read of the polling stuck for 1 s is cut for them);
-//     tried again within 250 ms, then kept in /data and sent again by the
-//     next reads (3 times at most) until a read shows them; the commands
-//     queued before them are cancelled; a newer command of the same target
-//     that left stops their resending. They need what any command needs: the
-//     token and the pinned certificate.
+//     waiting command (a read of the polling stuck for 1 s is cut for them),
+//     the standbys of a scene together; tried again within 250 ms; acked by
+//     ~3.4 s, still sent after the ack when the hub is busy. Decided by the
+//     first read sent after the answer of the hub: shown, done (a change made
+//     later in the app wins); not shown or not answered, sent again by the
+//     next reads (3 times at most), told in the status and the badge. The
+//     commands queued before them are cancelled; a newer "Schedule" / "Home"
+//     that left (or is about to, written to /data first) lifts them.
 //   - sensitive, refused unless "Allow heating commands" is on: the setpoint
 //     (SET_TEMP), "Schedule" (FROST_OFF) and "Home" (AWAY_OFF). A bounded
-//     queue (8), one at a time; decided on a fresh read (never on memory),
-//     the hub and the zone (id and name) checked; the option, the bounds and
-//     the stop guards checked on arrival, after the fresh read and right
-//     before the first byte (beforeSend); sent within 3.5 s of the click or
-//     refused unsent; a command that may have left is never "not sent";
-//     confirmed by a read back showing the value. A setpoint is refused while
-//     the zone (or the hub) is in standby, away or on holiday, and for 10 min
-//     after a standby or an away, which only "Schedule" or "Home" lift.
+//     queue (8), equal commands of a scene grouped; decided on a fresh read
+//     (never on memory), the hub and the zone (number and name) checked; the
+//     option, the bounds and the stop guards checked on arrival, after the
+//     fresh read and right before the first byte (beforeSend); sent within
+//     2.8 s of the click or refused unsent, acked by ~3.4 s; a command that
+//     may have left is never "not sent"; confirmed by a read back showing the
+//     value. A setpoint is refused while the zone (or the hub) is in standby,
+//     away or on holiday, and for 10 min after a standby or an away, which
+//     only "Schedule" or "Home" lift.
 // -----------------------------------------------------------------------------
 
 import { randomBytes } from 'node:crypto';
@@ -56,6 +60,7 @@ import { ERRORS, T, age, both, join, reasonOf, word } from './i18n.js';
 import { NeoHubClient } from './neohub/client.js';
 import { NeoHubError } from './neohub/errors.js';
 import { parseLive, parseSystem } from './neohub/model.js';
+import { isSafeName } from './neohub/protocol.js';
 import { readFingerprint } from './neohub/tls.js';
 import { StatePublisher } from './publisher.js';
 import { fileStore, normalizeMemory } from './store.js';
@@ -76,6 +81,12 @@ const degrees = (tenths) =>
   tenths === undefined
     ? both('?', '?')
     : both(`${tenths / 10} °C`, `${String(tenths / 10).replace('.', ',')} °C`);
+
+/** The zone name a created Gladys device was given at the Scan (a parameter). */
+const zoneNameParam = (device) => {
+  const value = device?.params?.find?.((p) => p?.name === 'zone_name')?.value;
+  return typeof value === 'string' ? value : undefined;
+};
 
 /** Lists the first 5 entries, then "and N more". */
 function bounded(entries, language) {
@@ -116,6 +127,8 @@ export class NeoHubApp {
     this.timer = undefined;
     this.running = undefined;
     this.followUps = new Set();
+    /** hub -> 'name' once it refused or ignored device numbers in a command. */
+    this.forms = new Map();
     /** delay -> the follow-up timer of that delay. */
     this.followUpBy = new Map();
     /** Commands waiting their turn, and the one being served. */
@@ -132,6 +145,8 @@ export class NeoHubApp {
     this.memoryUnreadable = true;
     /** target key -> 'applied' | 'not_applied': the last check of a write by a read. */
     this.lastCheck = new Map();
+    /** Commands sent, answered, waiting for a read back (until their ack). */
+    this.unchecked = [];
     this.reset();
   }
 
@@ -246,7 +261,8 @@ export class NeoHubApp {
       // were (never overwritten); read again every 10 s.
       this.memoryUnreadable = true;
       this.logger.warn(`heatmiser-neohub: /data unreadable (${err?.code ?? 'error'})`);
-      this.scheduleMemoryRetry();
+      // Only slow: read again at once, in the background, with more time; else in 10 s.
+      this.scheduleMemoryRetry(err?.code === 'ETIMEDOUT' ? 0 : TIMINGS.dataRetry);
     }
     const saved = normalizeMemory(loaded, now);
     if (saved.lastAttemptAt !== null) {
@@ -454,12 +470,12 @@ export class NeoHubApp {
   }
 
   /** A /data operation, never awaited more than 2 s (a slow disk never holds a read nor a command). */
-  bounded(promise) {
+  bounded(promise, ms = TIMINGS.dataTimeout) {
     let timer;
     const late = new Promise((_resolve, reject) => {
       timer = this.timers.setTimeout(
         () => reject(Object.assign(new Error('/data too slow'), { code: 'ETIMEDOUT' })),
-        TIMINGS.dataTimeout,
+        ms,
       );
     });
     promise.catch(() => {});
@@ -467,7 +483,7 @@ export class NeoHubApp {
   }
 
   /** /data unreadable at start: read again on its own timer (one read at a time), then merged. */
-  scheduleMemoryRetry() {
+  scheduleMemoryRetry(delay = TIMINGS.dataRetry) {
     const generation = this.generation;
     this.timers.clearTimeout(this.memoryTimer);
     this.memoryTimer = this.timers.setTimeout(async () => {
@@ -475,14 +491,15 @@ export class NeoHubApp {
       if (generation !== this.generation) return;
       let loaded;
       try {
-        loaded = await this.bounded(this.store.load());
+        // Off the path of any command: a slow disk gets more time here.
+        loaded = await this.bounded(this.store.load(), TIMINGS.dataRetryTimeout);
       } catch {
         if (generation === this.generation) this.scheduleMemoryRetry();
         return;
       }
       if (generation !== this.generation) return;
       await this.mergeMemory(loaded);
-    }, TIMINGS.dataRetry);
+    }, delay);
   }
 
   /** What /data held, merged once readable: never over what this run decided since. */
@@ -530,8 +547,15 @@ export class NeoHubApp {
     this.tokenChanged = false;
     await this.persist(mono);
     if (!hadPin && this.pin() && isComplete(this.config)) {
+      // The pin is back: the status says so, a stop asked meanwhile leaves, then a read.
       this.openClient();
-      this.schedule();
+      const generation = this.generation;
+      await this.setStatus(false, this.refused ? T.tokenRefused : T.connecting);
+      await this.resendGuards(generation);
+      if (generation === this.generation && !this.refused) {
+        this.schedule();
+        await this.tick();
+      }
     }
   }
 
@@ -789,6 +813,8 @@ export class NeoHubApp {
       this.queue(hubKey, hubStates(live), created);
     }
     this.settleGuards(hubId, live, at);
+    // Commands waiting for a read back get their answer from this read.
+    this.settleChecked();
   }
 
   queue(key, states, created) {
@@ -875,7 +901,18 @@ export class NeoHubApp {
       const entries = [...this.warnings.values()];
       message = join(message, T.notApplied(both(bounded(entries, 'en'), bounded(entries, 'fr'))));
     }
-    if ([...this.guards.entries()].some(([key, g]) => this.stillPending(key, g))) {
+    const contradicted = [...this.guards.entries()].filter(([, g]) => g.contradicted && !g.shown);
+    if (contradicted.length > 0) {
+      const names = contradicted.map(([key, g]) =>
+        g.kind === 'away'
+          ? T.hub
+          : both(this.zones.get(key)?.zone.name ?? key, this.zones.get(key)?.zone.name ?? key),
+      );
+      message = join(
+        message,
+        T.guardContradicted(both(bounded(names, 'en'), bounded(names, 'fr'))),
+      );
+    } else if ([...this.guards.entries()].some(([key, g]) => this.stillPending(key, g))) {
       message = join(message, T.guardPending);
     }
     return message;
@@ -961,6 +998,21 @@ export class NeoHubApp {
           ),
         };
       }
+    }
+    const guard = this.guards.get(key);
+    if (guard?.contradicted && !guard.shown) {
+      return {
+        transport: DEVICE_TRANSPORTS.LOCAL,
+        degraded: true,
+        message: both(
+          guard.kind === 'away'
+            ? 'Away answered by the hub but not applied: sent again'
+            : 'Standby answered by the hub but not applied: sent again',
+          guard.kind === 'away'
+            ? 'Absence répondue par le hub mais pas appliquée : renvoyée'
+            : 'Veille répondue par le hub mais pas appliquée : renvoyée',
+        ),
+      };
     }
     if (this.warnings.has(key)) {
       return {
@@ -1427,7 +1479,12 @@ export class NeoHubApp {
     // The names the zones had at the previous read (identity), then the fresh read:
     // one sent after the arrival of every command of the group (shared), never memory.
     const expected = new Map(
-      jobs.map((j) => [j.target.key, this.zones.get(j.target.key)?.zone.rawName]),
+      jobs.map((j) => [
+        j.target.key,
+        // The previous read, else (right after a restart) the name kept at the Scan.
+        this.zones.get(j.target.key)?.zone.rawName ??
+          zoneNameParam(this.createdDevice(j.target.key)),
+      ]),
     );
     const keys = jobs.map((j) => j.target.key);
     let read = this.freshRead(Math.max(...jobs.map((j) => j.received)), keys);
@@ -1452,6 +1509,30 @@ export class NeoHubApp {
         throw this.refusal(ERRORS.stopped);
       }
       this.absorb(read.hubId, read.live, read.at);
+    }
+    // A setpoint needs the unit: read now when unknown (right after a restart), within the deadline.
+    if (
+      tenths !== undefined &&
+      this.unit === undefined &&
+      this.monotonic() < sendBy - 2 * TIMINGS.commandMinSend
+    ) {
+      try {
+        const { hubId, response } = await client.request(API.commands.system, 0, {
+          deadline: sendBy - TIMINGS.commandMinSend,
+        });
+        const system = parseSystem(response);
+        if (
+          generation === this.generation &&
+          hubId === read.hubId &&
+          system?.unit &&
+          this.unit === undefined
+        ) {
+          this.unit = system.unit;
+          this.systemStamp = read.live.systemStamp;
+        }
+      } catch {
+        // Unknown: the setpoint is refused below.
+      }
     }
     const fresh = new Map();
     jobs = jobs.filter((job) => {
@@ -1504,11 +1585,15 @@ export class NeoHubApp {
     }
     let sending = jobs;
     let left = false;
+    // Device numbers (PDF p. 8), or names once this hub refused or ignored numbers.
+    const form = this.formOf(group[0].target.hub);
     try {
       await client.request(
         command,
         () => {
-          const ids = sending.map((j) => j.target.zone);
+          const ids = sending.map((j) =>
+            form === 'name' ? fresh.get(j).zone.rawName : j.target.zone,
+          );
           if (tenths !== undefined) return [tenths / 10, ids];
           return command === API.commands.standbyOff ? ids : 0;
         },
@@ -1520,6 +1605,13 @@ export class NeoHubApp {
             sending = sending.filter((job) => {
               try {
                 this.checkBeforeSend(job, generation, client, fresh.get(job));
+                if (
+                  form === 'name' &&
+                  job.target.zone !== HUB_KEY &&
+                  !isSafeName(fresh.get(job).zone.rawName)
+                ) {
+                  throw this.refusal(ERRORS.zoneNameUnknown);
+                }
                 return true;
               } catch (err) {
                 this.settleJob(job, err);
@@ -1566,6 +1658,10 @@ export class NeoHubApp {
           err.kind === 'late'
             ? this.lateError(sending[0]?.ahead ?? 0)
             : this.refusal(ERRORS.notSent(reasonOf(err)));
+      } else if (err.kind === 'hub' && form === 'number' && command !== API.commands.awayOff) {
+        // The hub may not take device numbers: names from now on for this hub.
+        this.forms.set(group[0].target.hub, 'name');
+        result = this.refusal(ERRORS.numbersRefused);
       } else if (err.kind === 'hub') {
         result = this.refusal(ERRORS.refusedByHub(err.text));
       } else if (err.kind === 'token') {
@@ -1582,37 +1678,61 @@ export class NeoHubApp {
       return;
     }
     this.afterWrite(generation);
-    // Answered: read back within the ack when there is time and no other command waits.
-    if (this.commands.length === 0 && this.monotonic() < answerBy - TIMINGS.commandMinSend) {
-      for (const job of sending) this.lastCheck.delete(job.target.key);
-      let check;
-      try {
-        check = await this.readLive(client, answerBy);
-      } catch {
-        check = undefined;
-      }
-      if (check && generation === this.generation) {
-        this.absorb(check.hubId, check.live, check.at);
-        await this.refreshStatus();
-        for (const job of sending) {
-          const result = this.lastCheck.get(job.target.key);
-          this.lastCheck.delete(job.target.key);
-          if (result === 'applied') {
-            this.settleJob(job, undefined);
-          } else if (result === 'not_applied') {
-            this.settleJob(
-              job,
-              this.refusal(
-                tenths !== undefined
-                  ? ERRORS.notAppliedNow(degrees(fresh.get(job).zone.targetTenths), degrees(tenths))
-                  : ERRORS.notShownYet,
-              ),
-            );
-          }
-        }
-      }
+    for (const job of sending) {
+      this.lastCheck.delete(job.target.key);
+      this.unchecked.push({
+        job,
+        key: job.target.key,
+        tenths,
+        before: fresh.get(job).zone?.targetTenths,
+      });
     }
-    for (const job of sending) this.settleJob(job, this.refusal(ERRORS.verifyLater));
+    // Answered: read back within the ack. When other commands wait, the read
+    // back of the last of them confirms this one too (one read for the scene);
+    // whatever no read shows by the ack is "sent, not shown yet".
+    const answeredAt = this.monotonic();
+    this.timers.setTimeout(
+      () => {
+        for (const job of sending) this.settleJob(job, this.refusal(ERRORS.verifyLater));
+        this.unchecked = this.unchecked.filter((u) => !u.job.done);
+      },
+      Math.max(0, answerBy - answeredAt),
+    );
+    if (this.commands.length > 0 || answeredAt >= answerBy - TIMINGS.commandMinSend) {
+      return;
+    }
+    let check;
+    try {
+      check = await this.readLive(client, answerBy);
+    } catch {
+      check = undefined;
+    }
+    if (check && generation === this.generation) {
+      this.absorb(check.hubId, check.live, check.at);
+      // The ack never waits for the publication to Gladys.
+      this.refreshStatus().catch(() => {});
+    }
+  }
+
+  /** The commands sent and waiting for a read back: answered from what the reads showed. */
+  settleChecked() {
+    for (const entry of this.unchecked) {
+      const result = this.lastCheck.get(entry.key);
+      if (result === 'applied') {
+        this.settleJob(entry.job, undefined);
+      } else if (result === 'not_applied') {
+        this.settleJob(
+          entry.job,
+          this.refusal(
+            entry.tenths !== undefined
+              ? ERRORS.notAppliedNow(degrees(entry.before), degrees(entry.tenths))
+              : ERRORS.notShownYet,
+          ),
+        );
+      }
+      if (entry.job.done) this.lastCheck.delete(entry.key);
+    }
+    this.unchecked = this.unchecked.filter((u) => !u.job.done);
   }
 
   /**
@@ -1713,9 +1833,23 @@ export class NeoHubApp {
 
   // --- Protective commands (standby, away) -------------------------------------
 
+  /** How this hub takes its zones in a command: 'number' (PDF p. 8) until it refuses or ignores one, then 'name'. */
+  formOf(hub) {
+    return this.forms.get(hub) ?? 'number';
+  }
+
+  /** The exact name of a zone for a command: the last read, else the Scan; undefined when none can be sent. */
+  nameOf(key) {
+    const name = this.zones.get(key)?.zone.rawName ?? zoneNameParam(this.createdDevice(key));
+    return isSafeName(name) ? name : undefined;
+  }
+
   /**
-   * The guards a read shows done are marked shown and not sent again; the
-   * expired ones are forgotten. A read sent before the stop left proves nothing.
+   * A stop is decided by the first read sent after the hub answered it: shown,
+   * it is done (a change made later in the app wins, it is never sent again);
+   * not shown, it is contradicted: sent again with the next reads (by name when
+   * it went by number), told in the status and the badge. Before any answer, a
+   * read sent after it that shows it settles it too. Expired guards are forgotten.
    */
   settleGuards(hubId, live, at) {
     let changed = false;
@@ -1725,16 +1859,27 @@ export class NeoHubApp {
         changed = true;
         continue;
       }
-      if (guard.shown || !key.startsWith(`${hubId}-`) || at < (guard.sentAt ?? -Infinity)) {
+      if (guard.shown || !key.startsWith(`${hubId}-`)) {
         continue;
       }
       const shown =
         guard.kind === 'away'
           ? live.hubAway === true
           : live.zones.find((z) => targetKey(hubId, z.id) === key)?.standby === true;
-      if (shown) {
+      const decisive = guard.answeredAt !== undefined && at >= guard.answeredAt;
+      if (shown && (decisive || at >= (guard.sentAt ?? -Infinity))) {
         guard.shown = true;
         guard.pending = false;
+        guard.contradicted = false;
+        changed = true;
+      } else if (decisive && !shown && !guard.decided) {
+        guard.decided = true;
+        guard.contradicted = true;
+        guard.pending = true;
+        if (guard.kind === 'standby' && guard.form === 'number') {
+          this.forms.set(hubId, 'name');
+        }
+        this.logger.warn(`heatmiser-neohub: the hub answered a ${guard.kind} but does not show it`);
         changed = true;
       }
     }
@@ -1748,7 +1893,7 @@ export class NeoHubApp {
    * the queue or a read in progress. The commands queued before it on its
    * target are cancelled (nothing asked before a stop leaves after it). The
    * ack comes by ~3.4 s; a stop not sent by then stays in the lane and leaves
-   * as soon as it can.
+   * as soon as the hub is free.
    */
   async protective(target, received, kind) {
     const seq = ++this.seq;
@@ -1789,11 +1934,14 @@ export class NeoHubApp {
     });
     const outcome = await Promise.race([this.sendProtective(key, guard), ack]);
     this.timers.clearTimeout(timer);
-    if (!guard.shown) {
-      await this.refreshStatus();
-    }
+    // The status and the badges follow; the ack never waits for them.
+    this.refreshStatus().catch(() => {});
     if (outcome.late) {
-      throw this.refusal(ERRORS.protectiveSending);
+      throw this.refusal(
+        guard.sentAt !== undefined && this.guards.get(key) === guard
+          ? ERRORS.protectiveWaiting
+          : ERRORS.protectiveSending,
+      );
     }
     if (outcome.error) {
       throw this.refusal(outcome.error);
@@ -1804,6 +1952,9 @@ export class NeoHubApp {
     if (guard.shown) {
       return undefined;
     }
+    if (guard.contradicted) {
+      throw this.refusal(ERRORS.protectiveContradicted);
+    }
     if (outcome.answered) {
       throw this.refusal(ERRORS.protectiveAccepted);
     }
@@ -1811,9 +1962,9 @@ export class NeoHubApp {
   }
 
   /**
-   * Sends a stop: the standbys waiting for the lane go together in one
-   * FROST_ON (a list of device numbers, PDF p. 8); an away alone. Resolves
-   * `{ sent, answered, lifted, error }`, never throws.
+   * Sends a stop: the standbys waiting for the lane go together (one FROST_ON
+   * with their device numbers, or one per zone by name when the hub refuses
+   * numbers); an away alone. Resolves the outcome of this guard, never throws.
    */
   sendProtective(key, guard) {
     if (!this.configLoaded) {
@@ -1839,19 +1990,42 @@ export class NeoHubApp {
       });
     }
     batch.guards.set(key, guard);
-    return batch.promise.then((outcome) => ({
-      ...outcome,
-      // A guard of the batch left out at the send (lifted by a newer command).
-      lifted: outcome.included && !outcome.included.has(key) ? true : outcome.lifted,
-    }));
+    return batch.promise.then((outcomes) => outcomes.get(key) ?? { lifted: true });
+  }
+
+  /** Every guard of a batch -> its outcome. By number first; by name per zone when the hub needs it. */
+  async runProtective(batch) {
+    const outcomes = new Map();
+    // Let the standbys of a scene join (they arrive within a few ms).
+    await this.sleep(TIMINGS.gather);
+    const hub = [...batch.guards.values()][0]?.hub;
+    let keys = [...batch.guards.keys()];
+    if (batch.kind === 'away' || this.formOf(hub) === 'number') {
+      const result = await this.sendStop(batch, keys, 'number');
+      if (!result.numbersRefused) {
+        for (const k of keys) {
+          // A guard left out at the send was lifted by a newer command.
+          outcomes.set(k, result.included && !result.included.has(k) ? { lifted: true } : result);
+        }
+        return outcomes;
+      }
+      // The hub refused the device numbers: by name from now on, zone by zone.
+      this.forms.set(hub, 'name');
+      this.logger.warn('heatmiser-neohub: the hub refused device numbers; zones are sent by name');
+      keys = [...result.included];
+    }
+    for (const k of keys) {
+      outcomes.set(k, await this.sendStop(batch, [k], 'name'));
+    }
+    batch.closed = true;
+    return outcomes;
   }
 
   /**
-   * One attempt (tried again within 250 ms while nothing left), then a read
-   * to see it. A stop the hub answered without error is not sent again (a
-   * change made since in the app wins); one never answered stays pending.
+   * One stop command for `keys` (a list of numbers, or one name), tried again
+   * within 250 ms while nothing left; then a read to decide it. Never throws.
    */
-  async runProtective(batch) {
+  async sendStop(batch, keys, form) {
     const client = this.client;
     const generation = this.generation;
     const command = batch.kind === 'away' ? API.commands.awayOn : API.commands.standbyOn;
@@ -1865,15 +2039,22 @@ export class NeoHubApp {
           () => {
             // Right before the first byte: a guard lifted by a newer "Schedule" / "Home" is left out.
             included = new Map(
-              [...batch.guards].filter(([k, g]) => this.guards.get(k) === g && !this.lifted(k, g)),
+              keys
+                .map((k) => [k, batch.guards.get(k)])
+                .filter(([k, g]) => g && this.guards.get(k) === g && !this.lifted(k, g)),
             );
             if (included.size === 0) {
               throw new NeoHubError('lifted', 'a newer command left');
             }
-            return batch.kind === 'away' ? 0 : [...included.values()].map((g) => g.zone);
+            if (batch.kind === 'away') return 0;
+            if (form === 'number') return [...included.values()].map((g) => g.zone);
+            const name = this.nameOf(keys[0]);
+            if (name === undefined) throw new NeoHubError('noname', 'no name to send');
+            return [name];
           },
           {
             deadline: this.monotonic() + TIMINGS.requestTimeout,
+            // Never dropped from the lane: it leaves as soon as the hub is free.
             sendBy: Infinity,
             priority: true,
             onSent: () => {
@@ -1882,6 +2063,9 @@ export class NeoHubApp {
               const at = this.monotonic();
               for (const [k, g] of included) {
                 g.sentAt = at;
+                g.form = batch.kind === 'away' ? 'number' : form;
+                g.answeredAt = undefined;
+                g.decided = false;
                 this.markLeft(k, g.seq);
               }
             },
@@ -1891,23 +2075,29 @@ export class NeoHubApp {
         if (generation !== this.generation) {
           return { sent: left };
         }
-        const keys = included ? new Set(included.keys()) : undefined;
+        const done = included ? new Set(included.keys()) : undefined;
         if (left || err?.sent) {
           this.afterWrite(generation);
           if (err?.kind === 'token') {
             // Not done: kept pending (only a new token or a click sends it again).
             await this.tokenRefused();
-            return { sent: true, included: keys, error: ERRORS.tokenRefusedSent };
+            return { sent: true, included: done, error: ERRORS.tokenRefusedSent };
           }
           if (err?.kind === 'hub') {
+            if (form === 'number' && batch.kind === 'standby') {
+              return { sent: true, included: done, numbersRefused: true };
+            }
             for (const g of included.values()) g.pending = false;
             this.persist(this.monotonic()).catch(() => {});
-            return { sent: true, included: keys, error: ERRORS.refusedByHub(err.text) };
+            return { sent: true, included: done, error: ERRORS.refusedByHub(err.text) };
           }
-          return { sent: true, included: keys };
+          return { sent: true, included: done };
         }
         if (err?.kind === 'lifted') {
           return { sent: false, lifted: true };
+        }
+        if (err?.kind === 'noname') {
+          return { sent: false, error: ERRORS.zoneNameUnknown };
         }
         const mono = this.monotonic();
         firstFailure ??= mono;
@@ -1933,18 +2123,18 @@ export class NeoHubApp {
         await this.sleep(50);
         continue;
       }
-      // Answered without error: the hub took it; never sent again by the reads.
-      for (const g of included.values()) g.pending = false;
-      this.persist(this.monotonic()).catch(() => {});
+      // Answered without error: the first read sent from now on decides it.
+      const answeredAt = this.monotonic();
+      for (const g of included.values()) g.answeredAt = answeredAt;
+      this.persist(answeredAt).catch(() => {});
       this.afterWrite(generation);
       try {
         const check = await this.readLive(client, this.monotonic() + TIMINGS.commandReadMax, true);
         if (generation === this.generation) {
           this.absorb(check.hubId, check.live, check.at);
-          await this.refreshStatus();
         }
       } catch {
-        // Seen by the next reads.
+        // Decided by the next reads.
       }
       return { sent: true, answered: true, included: new Set(included.keys()) };
     }
@@ -1975,10 +2165,13 @@ export class NeoHubApp {
       guard.hub ??= hub;
       guard.zone ??= zone === HUB_KEY ? HUB_KEY : Number(zone);
       guard.resends -= 1;
-      this.logger.info(`heatmiser-neohub: ${guard.kind} sent again (not answered yet)`);
+      this.logger.info(`heatmiser-neohub: ${guard.kind} sent again (not applied yet)`);
       sends.push(this.sendProtective(key, guard));
     }
     await Promise.all(sends);
     await this.persist(this.monotonic());
+    if (sends.length > 0 && generation === this.generation) {
+      await this.refreshStatus();
+    }
   }
 }

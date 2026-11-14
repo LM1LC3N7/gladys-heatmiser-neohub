@@ -46,13 +46,16 @@ appear in the logs, the status nor the files of the integration.
 lowers the heating of its zone; away puts every thermostat in standby and
 turns the time clocks and neoPlugs off. They are sent at once, before any
 other command waiting (a read of the hub stuck for 1 s is cut for them),
-addressed by the device number of the zone (never by its name); the standbys
-of a scene leave together in one command. Gladys gets its answer within about
+addressed by the device number of the zone; the standbys of a scene leave
+together in one command. A hub that refuses device numbers, or answers them
+without doing anything, gets the zone by the name its last read gave (one
+command per zone), at once and from then on. Gladys gets its answer within about
 3.4 s; a stop that could not leave by then stays in line and leaves as soon as
-the hub is free. A stop the hub did not answer is sent again with the next
-reads, 3 times at most; one the hub answered without error is not sent again,
-even if its data does not show it yet: if you put the zone back on its program
-in the app meanwhile, your choice wins. A newer Schedule (or Home) that left
+the hub is free. A stop is decided by the first read of the hub sent after its
+answer: if it shows it, it is done, and a change you make later in the app
+wins (never sent again); if it does not, or the hub did not answer, the stop
+is sent again with the next reads, 3 times at most, and the status and the
+badge of the zone say so. A newer Schedule (or Home) that left
 lifts the stop: it is not sent again, not even after a restart. A Schedule (or
 Home) refused before leaving (option off, pause, too late) leaves the stop to
 be sent. A command asked before a standby on the same zone (before an away, on
@@ -87,8 +90,9 @@ setpoint is refused:
   Schedule or Home has left since;
 - when the hub is set to °F (only °C is supported), or its unit is not read
   yet (again after any change of the system of the hub);
-- when the zone is offline, gone, not read yet, or renamed since the previous
-  read (try again);
+- when the zone is offline, gone, or renamed since the previous read (try
+  again); right after a restart, the name kept at the Scan and a read of the
+  unit within the command are used;
 - when 8 commands already wait, during a pause after failed reads, after a
   refused token, or when its turn does not come in time (nothing sent).
 

@@ -47,13 +47,16 @@ La veille ne fait que baisser le chauffage de sa zone ; l'absence met tous les
 thermostats en veille et coupe les horloges et les neoPlug. Elles partent tout
 de suite, avant toute autre commande en attente (une lecture du hub bloquée
 depuis 1 s est coupée pour elles), adressées par le numéro d'appareil de la
-zone (jamais par son nom) ; les veilles d'une scène partent ensemble en une
-commande. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
-d'ici là reste dans la file et part dès que le hub est libre. Un arrêt sans
-réponse du hub est renvoyé avec les prochaines lectures, 3 fois au plus ; un
-arrêt auquel le hub a répondu sans erreur n'est pas renvoyé, même si ses
-données ne le montrent pas encore : si vous remettez entre-temps la zone sur
-son programme dans l'app, votre choix l'emporte. Un Programme (ou Présent) plus
+zone ; les veilles d'une scène partent ensemble en une commande. Un hub qui
+refuse les numéros, ou y répond sans rien faire, reçoit la zone par le nom que
+lui donne sa dernière lecture (une commande par zone), tout de suite et
+ensuite. Gladys a sa réponse en 3,4 s environ ; un arrêt qui n'a pas pu partir
+d'ici là reste dans la file et part dès que le hub est libre. Un arrêt est
+jugé sur la première lecture du hub partie après sa réponse : si elle le
+montre, c'est fait, et un changement fait ensuite dans l'app l'emporte (jamais
+renvoyé) ; sinon, ou si le hub n'a pas répondu, l'arrêt est renvoyé avec les
+prochaines lectures, 3 fois au plus, et le statut et le badge de la zone le
+disent. Un Programme (ou Présent) plus
 récent parti lève l'arrêt : il n'est plus renvoyé, même après un redémarrage.
 Un Programme (ou Présent) refusé avant de partir (option désactivée, pause,
 trop tard) laisse l'arrêt partir. Une commande demandée avant une mise en
@@ -88,8 +91,9 @@ autres refusées sans envoi (« trop tard »). Une consigne est refusée :
   sauf si Programme ou Présent est parti depuis ;
 - quand le hub est réglé en °F (seul le °C est pris en charge), ou que son unité
   n'est pas encore lue (de nouveau après tout changement du système du hub) ;
-- quand la zone est hors ligne, disparue, pas encore lue, ou renommée depuis la
-  lecture précédente (réessayez) ;
+- quand la zone est hors ligne, disparue, ou renommée depuis la lecture
+  précédente (réessayez) ; juste après un redémarrage, le nom gardé au Scan et
+  une lecture de l'unité pendant la commande servent ;
 - quand 8 commandes attendent déjà, pendant une pause après des lectures en
   échec, après un jeton refusé, ou quand son tour ne vient pas à temps (rien
   envoyé).

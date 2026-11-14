@@ -174,6 +174,11 @@ export const T = {
       `Last command not shown by the hub: ${list.en}.`,
       `Dernière commande pas visible dans le hub : ${list.fr}.`,
     ),
+  guardContradicted: (list) =>
+    both(
+      `Answered by the hub but not applied (sent again): ${list.en}.`,
+      `Répondu par le hub mais pas appliqué (renvoyé) : ${list.fr}.`,
+    ),
   guardPending: both(
     'A standby or an away was not answered by the hub yet: it is sent again with the next reads.',
     'Une mise en veille ou une absence n’a pas encore eu de réponse du hub : elle est renvoyée avec les prochaines lectures.',
@@ -326,9 +331,25 @@ export const ERRORS = {
     'Being sent: the hub has not answered yet; it leaves as soon as the hub is free, then the next reads show it.',
     'En cours d’envoi : le hub n’a pas encore répondu ; il part dès que le hub est libre, puis les prochaines lectures le montrent.',
   ),
+  protectiveWaiting: both(
+    'Sent; waiting for the answer of the hub: the next reads will show it.',
+    'Envoyé ; en attente de la réponse du hub : les prochaines lectures le montreront.',
+  ),
+  protectiveContradicted: both(
+    'Answered by the hub, but its next read does not show it: sent again with the next reads (3 times at most).',
+    'Répondu par le hub, mais sa lecture suivante ne le montre pas : renvoyé avec les prochaines lectures (3 fois au plus).',
+  ),
+  zoneNameUnknown: both(
+    'Not sent: the hub needs the name of the zone, not known yet (after the next read).',
+    'Pas envoyé : le hub demande le nom de la zone, pas encore connu (après la prochaine lecture).',
+  ),
+  numbersRefused: both(
+    'The hub refused the device number: try again, the name of the zone will be used.',
+    'Le hub a refusé le numéro d’appareil : réessayez, le nom de la zone sera utilisé.',
+  ),
   protectiveAccepted: both(
-    'Sent and accepted by the hub; its data does not show it yet (the next reads will).',
-    'Envoyé et accepté par le hub ; ses données ne le montrent pas encore (les prochaines lectures le montreront).',
+    'Sent and answered by the hub; the next read decides (sent again if it does not show it).',
+    'Envoyé et répondu par le hub ; la prochaine lecture décide (renvoyé si elle ne le montre pas).',
   ),
   zoneOffline: both(
     'Not sent: the thermostat is offline.',

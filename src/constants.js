@@ -162,6 +162,8 @@ export const TIMINGS = {
   /** A read or a write of /data is never awaited longer; unreadable at start, read again every 10 s. */
   dataTimeout: 2 * SECOND,
   dataRetry: 10 * SECOND,
+  /** The read again of an unreadable /data (in the background): a slow disk gets this long. */
+  dataRetryTimeout: 30 * SECOND,
   /** The configuration of Gladys not read at start: new tries 5 s, 15 s, 1 min, then every 5 min. */
   configRetry: [5 * SECOND, 15 * SECOND, MINUTE, 5 * MINUTE],
 };
