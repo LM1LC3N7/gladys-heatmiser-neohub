@@ -1,6 +1,6 @@
 {
   "name": "gladys-heatmiser-neohub",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Gladys Assistant external integration for Heatmiser neoStat thermostats through the neoHub local API (WebSocket). Not affiliated with Heatmiser.",
   "type": "module",

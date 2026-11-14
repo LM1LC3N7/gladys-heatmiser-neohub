@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
 ### Added
 
 - First version: the thermostat zones of a Heatmiser neoHub, read locally
@@ -26,3 +28,6 @@ the notes of the version's GitHub Release.
   together, as do equal setpoints; Gladys gets its answer within ~3.4 s.
 - Store: `countries: ["GB"]` (Heatmiser is a UK brand), hence
   `gladys_version >= 5.3.0`.
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-heatmiser-neohub/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-heatmiser-neohub/releases/tag/v0.1.1
