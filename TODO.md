@@ -80,3 +80,5 @@ real hub.
   temperature, battery.
 - Discovery of the hub by UDP `hubseek` (port 19790) if the network of the
   container allows it.
+
+- m-28 (review r5, open): on a hub that ignores device numbers, each standby waits 90 to 600 s for the name resend. Idea: a session-only memory (not in /data) that sends number and name together once a contradicted standby showed up after both forms left.
