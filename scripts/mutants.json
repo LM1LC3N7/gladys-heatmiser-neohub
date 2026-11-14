@@ -1,0 +1,254 @@
+[
+  {
+    "name": "pin not checked",
+    "file": "src/neohub/tls.js",
+    "from": "if (seen !== pin) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "no pin: still connects",
+    "file": "src/neohub/tls.js",
+    "from": "    if (!pin) {\n      reject(new NeoHubError('nopin', 'certificate not pinned'));\n      return;\n    }\n",
+    "to": ""
+  },
+  {
+    "name": "answer of another command taken",
+    "file": "src/neohub/client.js",
+    "from": "frame.invalid || frame.commandId !== inflight.id",
+    "to": "frame.invalid"
+  },
+  {
+    "name": "answer type not checked",
+    "file": "src/neohub/client.js",
+    "from": "if (frame.type !== API.responseType) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "hub id not checked",
+    "file": "src/neohub/client.js",
+    "from": "if (!frame.hubId || (this.sessionHub && frame.hubId !== this.sessionHub)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "protective not first",
+    "file": "src/neohub/client.js",
+    "from": "(priority ? this.high : this.low).push(",
+    "to": "this.low.push("
+  },
+  {
+    "name": "no cut of a stuck read",
+    "file": "src/neohub/client.js",
+    "from": "        holder.cut = true;\n        holder.onCut?.();",
+    "to": "        holder.cut = true;"
+  },
+  {
+    "name": "frames unbounded",
+    "file": "src/neohub/client.js",
+    "from": "maxPayload: LIMITS.frameBytes,",
+    "to": "maxPayload: 100 * 1024 * 1024,"
+  },
+  {
+    "name": "timeout said not sent",
+    "file": "src/neohub/client.js",
+    "from": "new NeoHubError('timeout', 'no answer in time', { sent: true, first })",
+    "to": "new NeoHubError('timeout', 'no answer in time', { sent: false, first })"
+  },
+  {
+    "name": "option not checked on arrival nor before send",
+    "file": "src/app.js",
+    "from": "  checkBeforeSend(job, generation, client, fresh) {\n    if (!this.config.allowHeating) {",
+    "to": "  checkBeforeSend(job, generation, client, fresh) {\n    if (false) {"
+  },
+  {
+    "name": "option not checked on arrival",
+    "file": "src/app.js",
+    "from": "    const wanted = this.parseCommand(target.role, value);\n    if (!this.config.allowHeating) {",
+    "to": "    const wanted = this.parseCommand(target.role, value);\n    if (false) {"
+  },
+  {
+    "name": "half steps not checked",
+    "file": "src/app.js",
+    "from": "tenths % 5 !== 0",
+    "to": "false"
+  },
+  {
+    "name": "ceiling not checked before send",
+    "file": "src/app.js",
+    "from": "      const high = Math.min(SETPOINT.max, this.config.ceiling);\n      if (tenths < SETPOINT.min * 10 || tenths > high * 10) {\n        throw this.refusal(ERRORS.outOfRange(SETPOINT.min, high));\n      }\n      if (this.unit",
+    "to": "      const high = Math.min(SETPOINT.max, this.config.ceiling);\n      if (high < 0) {\n        throw this.refusal(ERRORS.outOfRange(SETPOINT.min, high));\n      }\n      if (this.unit"
+  },
+  {
+    "name": "setpoint in standby allowed",
+    "file": "src/app.js",
+    "from": "        zone.standby !== false ||\n",
+    "to": "        false ||\n"
+  },
+  {
+    "name": "hub holiday ignored",
+    "file": "src/app.js",
+    "from": "        live.hubHoliday !== false\n",
+    "to": "        false\n"
+  },
+  {
+    "name": "\u00b0F setpoint allowed",
+    "file": "src/app.js",
+    "from": "      if (this.unit !== 'C') {",
+    "to": "      if (false) {"
+  },
+  {
+    "name": "older standby does not cancel",
+    "file": "src/app.js",
+    "from": "if (guard && guard.seq > job.seq) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "setpoint allowed under a stop guard",
+    "file": "src/app.js",
+    "from": "if (job.wanted.tenths !== undefined && (zoneGuard || hubGuard)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "queued commands not cancelled by a standby",
+    "file": "src/app.js",
+    "from": "(kind === 'away' || job.target.key === key)",
+    "to": "false"
+  },
+  {
+    "name": "schedule does not lift the guard",
+    "file": "src/app.js",
+    "from": "          this.markLeft(key, job.seq);\n",
+    "to": ""
+  },
+  {
+    "name": "other hub commanded",
+    "file": "src/app.js",
+    "from": "    if (hubId !== target.hub) {\n      throw this.refusal(ERRORS.otherHub);",
+    "to": "    if (false) {\n      throw this.refusal(ERRORS.otherHub);"
+  },
+  {
+    "name": "renamed zone commanded",
+    "file": "src/app.js",
+    "from": "zone.rawName !== expected",
+    "to": "false"
+  },
+  {
+    "name": "send deadline not checked in beforeSend",
+    "file": "src/app.js",
+    "from": "          if (this.monotonic() >= sendBy) {\n            throw this.lateError(ahead);",
+    "to": "          if (false) {\n            throw this.lateError(ahead);"
+  },
+  {
+    "name": "cut read counted as failure",
+    "file": "src/app.js",
+    "from": "if (kind === 'cut' || kind === 'stopped') {",
+    "to": "if (kind === 'stopped') {"
+  },
+  {
+    "name": "closed once is a refusal",
+    "file": "src/app.js",
+    "from": "++this.closedFirst >= 2",
+    "to": "++this.closedFirst >= 1"
+  },
+  {
+    "name": "refused token retried at start",
+    "file": "src/app.js",
+    "from": "      if (tokenTag(refused.salt, this.config.token) === refused.tag) {\n        this.refused = true;",
+    "to": "      if (tokenTag(refused.salt, this.config.token) === refused.tag) {\n        this.refused = false;"
+  },
+  {
+    "name": "resends unbounded",
+    "file": "src/app.js",
+    "from": "guard.resends <= 0",
+    "to": "false"
+  },
+  {
+    "name": "reads not paced",
+    "file": "src/app.js",
+    "from": "    if (mono < this.dueAt(mono)) {\n      this.schedule();\n      return;\n    }",
+    "to": "    if (false) {\n      this.schedule();\n      return;\n    }"
+  },
+  {
+    "name": "pin learnt over an unreadable /data",
+    "file": "src/app.js",
+    "from": "    if (!this.pin()) {\n      if (this.memoryUnreadable) {\n        return T.test.memoryUnreadable;\n      }",
+    "to": "    if (!this.pin()) {\n      if (false) {\n        return T.test.memoryUnreadable;\n      }"
+  },
+  {
+    "name": "/data waits unbounded",
+    "file": "src/app.js",
+    "from": "    return Promise.race([promise, late])",
+    "to": "    return Promise.race([promise])"
+  },
+  {
+    "name": "offline zone commanded",
+    "file": "src/app.js",
+    "from": "    if (zone.offline !== false) {\n      throw this.refusal(ERRORS.zoneOffline);",
+    "to": "    if (false) {\n      throw this.refusal(ERRORS.zoneOffline);"
+  },
+  {
+    "name": "text published as a temperature",
+    "file": "src/neohub/model.js",
+    "from": "  } else {\n    return undefined;\n  }\n  if (",
+    "to": "  } else {\n    value = Number(raw);\n  }\n  if ("
+  },
+  {
+    "name": "time clocks taken as thermostats",
+    "file": "src/neohub/model.js",
+    "from": "if (raw.THERMOSTAT !== true || raw.TIMECLOCK === true) {",
+    "to": "if (raw.TIMECLOCK === true) {"
+  },
+  {
+    "name": "names with quotes sent",
+    "file": "src/neohub/protocol.js",
+    "from": "const SAFE_NAME = /^[^'\"\\\\\\u0000-\\u001f\\u007f]{1,60}$/u;",
+    "to": "const SAFE_NAME = /^.{1,60}$/u;"
+  },
+  {
+    "name": "unknown commands encodable",
+    "file": "src/neohub/protocol.js",
+    "from": "  if (!Object.values(API.commands).includes(name)) {",
+    "to": "  if (false) {"
+  },
+  {
+    "name": "token refusal not recognised",
+    "file": "src/neohub/protocol.js",
+    "from": "      return TOKEN_REFUSED(text) ? { token: true, text } : { text };",
+    "to": "      return { text };"
+  },
+  {
+    "name": "future pause kept",
+    "file": "src/store.js",
+    "from": "p.until <= now + TIMINGS.pauseMax",
+    "to": "true"
+  },
+  {
+    "name": "offline zone published",
+    "file": "src/devices.js",
+    "from": "  if (zone.offline !== false) {\n    return [];\n  }",
+    "to": "  if (false) {\n    return [];\n  }"
+  },
+  {
+    "name": "a newer command that left does not lift the guard",
+    "file": "src/app.js",
+    "from": "return (this.lastLeft.get(key) ?? 0) > guard.seq;",
+    "to": "return false;"
+  },
+  {
+    "name": "token refused after the send called not sent",
+    "file": "src/app.js",
+    "from": "return { sent: true, error: ERRORS.tokenRefusedSent };",
+    "to": "return { sent: false, error: ERRORS.tokenRefused };"
+  },
+  {
+    "name": "/data written before it is read",
+    "file": "src/app.js",
+    "from": "    this.memoryUnreadable = true;\n    /** target key",
+    "to": "    this.memoryUnreadable = false;\n    /** target key"
+  },
+  {
+    "name": "protective refused before the configuration",
+    "file": "src/app.js",
+    "from": "    if (!this.configLoaded) {\n      return { error: ERRORS.protectiveLater };\n    }\n",
+    "to": "    if (!this.configLoaded) {\n      return { error: ERRORS.configNotLoaded };\n    }\n"
+  }
+]
